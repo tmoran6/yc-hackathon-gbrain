@@ -1,6 +1,7 @@
 # Medication Refill Processing
 
 A reusable skill captured from the pharmacy owner doing the task once.
+Lives at `brain/skills/medication-refill-processing.md` once committed.
 
 **Trigger:** A patient requests a prescription refill by phone, app, or in person.
 
@@ -29,7 +30,6 @@ A reusable skill captured from the pharmacy owner doing the task once.
 **Exceptions — what to do when it goes wrong:**
 - **Insurance rejected:** contact the prescriber for a prior authorization, or
   offer the patient the cash price. Do not dispense until resolved.
-  See `insurance-prior-authorization.md`.
 - **Refill too early:** tell the patient the earliest eligible date and note the request.
 - **Out of stock:** create a supplier restock order and give an estimated ready date.
 - **No refills remaining:** message the prescriber for a new prescription before proceeding.

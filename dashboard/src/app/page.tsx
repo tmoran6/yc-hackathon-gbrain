@@ -34,41 +34,39 @@ function displayStatus(row: SessionRow): DisplayStatus {
 }
 
 export default async function Home() {
-  const { rows } = await pool.query<SessionRow>(
-    `SELECT s.id, s.username, s.status, s.started_at, s.ended_at,
-            a.result -> 'workflow' ->> 'title' AS workflow_title,
-            a.review_state,
-            s.tags
-       FROM sessions s
-       LEFT JOIN analysis a ON a.session_id = s.id
-       ORDER BY s.started_at DESC
-       LIMIT 200`,
-  );
+  let rows: SessionRow[] = [];
+  let dbError: string | null = null;
+  try {
+    const result = await pool.query<SessionRow>(
+      `SELECT s.id, s.username, s.status, s.started_at, s.ended_at,
+              a.result -> 'workflow' ->> 'title' AS workflow_title
+         FROM sessions s
+         LEFT JOIN analysis a ON a.session_id = s.id
+         ORDER BY s.started_at DESC
+         LIMIT 200`,
+    );
+    rows = result.rows;
+  } catch (err) {
+    dbError = err instanceof Error ? err.message : String(err);
+  }
 
   return (
     <main style={{ maxWidth: 960, margin: "0 auto" }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "baseline",
-          justifyContent: "space-between",
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        <h1 style={{ marginBottom: "0.25rem" }}>Recording sessions</h1>
-        <Link
-          href="/demo"
+      <h1 style={{ marginBottom: "0.25rem" }}>Recording sessions</h1>
+      {dbError && (
+        <p
           style={{
-            color: "var(--text-link)",
-            textDecoration: "none",
-            fontSize: 14,
-            fontWeight: 500,
+            background: "#3a1b1b",
+            color: "#f0a0a0",
+            padding: "10px 14px",
+            borderRadius: 8,
+            fontSize: 13,
           }}
         >
-          Skill capture demo →
-        </Link>
-      </div>
+          Database unavailable — session list hidden. The Work Recorder demo
+          does not need it. ({dbError})
+        </p>
+      )}
       <p style={{ opacity: 0.6, marginTop: 0 }}>
         {rows.length} session{rows.length === 1 ? "" : "s"}. Click a row to
         browse screenshots and transcripts.

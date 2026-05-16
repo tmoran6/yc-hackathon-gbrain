@@ -1,94 +1,63 @@
 import { NextResponse } from "next/server";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { brainDir, skillsDir, runGbrain } from "@/lib/gbrain";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { execSync } from "node:child_process";
+import { BRAIN_DIR, SKILLS_DIR, gbrainEnv } from "@/lib/gbrain";
 
 export const runtime = "nodejs";
-
-/**
- * POST /api/brain/commit — see contracts/api.md.
- *
- * Writes a skill page to brain/skills/<slug>.md, then re-indexes the brain
- * with `gbrain import brain/ --no-embed` followed by `gbrain embed --stale`.
- */
 
 type CommitBody = {
   slug?: unknown;
   skillPage?: unknown;
 };
 
-function fail(error: string) {
-  return NextResponse.json({ ok: false, error }, { status: 500 });
-}
-
-// gbrain page slugs: lowercase letters, digits, hyphens. Also blocks path
-// traversal since `/`, `.` and `\` are rejected.
-function normalizeSlug(raw: string): string | null {
-  const slug = raw.trim().toLowerCase();
-  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) ? slug : null;
-}
-
 export async function POST(req: Request) {
   let body: CommitBody;
   try {
     body = (await req.json()) as CommitBody;
   } catch {
-    return fail("body must be JSON");
+    return NextResponse.json({ ok: false, error: "body must be JSON" }, { status: 400 });
   }
 
-  if (typeof body.slug !== "string" || !body.slug.trim()) {
-    return fail("slug is required");
-  }
-  if (typeof body.skillPage !== "string" || !body.skillPage.trim()) {
-    return fail("skillPage is required");
-  }
+  const slug = typeof body.slug === "string" ? body.slug.trim() : "";
+  const skillPage = typeof body.skillPage === "string" ? body.skillPage : "";
 
-  const slug = normalizeSlug(body.slug);
   if (!slug) {
-    return fail(
-      "slug must be lowercase alphanumeric words separated by hyphens",
-    );
+    return NextResponse.json({ ok: false, error: "slug is required" }, { status: 400 });
   }
-
-  const dir = skillsDir();
-  const filePath = path.join(dir, `${slug}.md`);
+  if (!skillPage) {
+    return NextResponse.json({ ok: false, error: "skillPage is required" }, { status: 400 });
+  }
 
   try {
-    await mkdir(dir, { recursive: true });
-    await writeFile(filePath, body.skillPage, "utf8");
-  } catch (err) {
-    return fail(`failed to write skill page: ${(err as Error).message}`);
-  }
+    // 1. Ensure skills directory exists
+    fs.mkdirSync(SKILLS_DIR, { recursive: true });
 
-  const importRes = await runGbrain([
-    "import",
-    `${path.basename(brainDir())}/`,
-    "--no-embed",
-  ]).catch((err: Error) => err);
-  if (importRes instanceof Error) {
-    return fail(`gbrain import failed: ${importRes.message}`);
-  }
-  if (importRes.code !== 0) {
-    return fail(
-      `gbrain import exited ${importRes.code}: ${
-        importRes.stderr.trim() || importRes.stdout.trim()
-      }`,
-    );
-  }
+    // 2. Write skill page to brain/skills/<slug>.md
+    const skillPath = path.join(SKILLS_DIR, `${slug}.md`);
+    fs.writeFileSync(skillPath, skillPage, "utf8");
 
-  const embedRes = await runGbrain(["embed", "--stale"]).catch(
-    (err: Error) => err,
-  );
-  if (embedRes instanceof Error) {
-    return fail(`gbrain embed failed: ${embedRes.message}`);
-  }
-  if (embedRes.code !== 0) {
-    return fail(
-      `gbrain embed exited ${embedRes.code}: ${
-        embedRes.stderr.trim() || embedRes.stdout.trim()
-      }`,
-    );
-  }
+    const env = gbrainEnv();
+    const execOpts = {
+      env,
+      encoding: "utf8" as const,
+      stdio: ["pipe", "pipe", "pipe"] as ["pipe", "pipe", "pipe"],
+      maxBuffer: 10 * 1024 * 1024,
+      // Run from /tmp so gbrain doesn't auto-load .env.local from dashboard/ cwd.
+      // gbrain scans for .env files from cwd upward; dashboard/.env.local has
+      // DATABASE_URL that redirects gbrain to a remote Postgres instead of pglite.
+      cwd: "/tmp" as string,
+    };
 
-  return NextResponse.json({ ok: true, slug, imported: true });
+    // 3. Run gbrain import (no embedding yet)
+    execSync(`gbrain import ${JSON.stringify(BRAIN_DIR)} --no-embed`, execOpts);
+
+    // 4. Embed stale documents
+    execSync(`gbrain embed --stale`, execOpts);
+
+    return NextResponse.json({ ok: true, slug, imported: true });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  }
 }

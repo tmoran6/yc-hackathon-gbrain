@@ -1,128 +1,59 @@
 {
-  "generated_at": "2026-05-16T11-53-52.000Z",
-  "model": "gemini-2.5-flash",
-  "session": "session_2026-05-16_11-53-52",
-  "session_path": "/Users/maria/Movies/ScreenRecorder/session_2026-05-16_11-53-52",
-  "duration_sec": 44.6,
+  "generated_at": "2026-05-16T15:10:00.000Z",
+  "model": "gemini-2.0-flash",
+  "session": "session_2026-05-16_15-04-12",
+  "session_path": "~/Movies/ScreenRecorder/session_2026-05-16_15-04-12",
+  "duration_sec": 142.5,
   "chunk_seconds": 15,
-  "frame_count": 89,
+  "frame_count": 285,
   "audio": {
-    "available": true,
-    "summary": "Maria walks through her morning routine, checking yesterday's sales and ordering produce before service."
+    "summary": "Owner explains she is processing a medication refill request that came in by phone, checking the patient record, insurance, and stock."
   },
   "steps": [
-    {
-      "chunk": 0,
-      "start_sec": 0,
-      "end_sec": 14.9,
-      "frame_count": 30,
-      "sampled_frames": ["frame_0001.png", "frame_0010.png", "frame_0020.png", "frame_0030.png"],
-      "audio_excerpt": "First thing I do is pull up yesterday's numbers.",
-      "analysis": {
-        "primary_app": "Toast POS",
-        "apps": ["Toast POS", "Google Chrome"],
-        "action": "Reviewing yesterday's sales by menu item",
-        "intent": "Understand what sold so prep can be planned",
-        "step_by_step": [
-          "Opened the Toast POS dashboard",
-          "Selected yesterday's date range",
-          "Sorted the sales report by quantity sold"
-        ],
-        "ui_elements": ["Date picker", "Sales report table", "Sort header"],
-        "confidence": 0.86
-      }
-    },
-    {
-      "chunk": 1,
-      "start_sec": 15,
-      "end_sec": 29.8,
-      "frame_count": 29,
-      "sampled_frames": ["frame_0031.png", "frame_0040.png", "frame_0050.png", "frame_0059.png"],
-      "audio_excerpt": "Then I check what we're low on before I order.",
-      "analysis": {
-        "primary_app": "Google Sheets",
-        "apps": ["Google Sheets"],
-        "action": "Comparing top sellers against the inventory sheet",
-        "intent": "Identify ingredients running low",
-        "step_by_step": [
-          "Opened the inventory tracking spreadsheet",
-          "Cross-referenced best-selling dishes with stock counts",
-          "Highlighted ingredients below the reorder threshold"
-        ],
-        "ui_elements": ["Spreadsheet rows", "Conditional formatting"],
-        "confidence": 0.79
-      }
-    },
-    {
-      "chunk": 2,
-      "start_sec": 30,
-      "end_sec": 44.6,
-      "frame_count": 30,
-      "sampled_frames": ["frame_0060.png", "frame_0070.png", "frame_0080.png", "frame_0089.png"],
-      "audio_excerpt": "I place the produce order and message the kitchen.",
-      "analysis": {
-        "primary_app": "Supplier Portal",
-        "apps": ["Supplier Portal", "WhatsApp"],
-        "action": "Placing a produce order and notifying kitchen staff",
-        "intent": "Restock low ingredients and brief the team",
-        "step_by_step": [
-          "Logged into the produce supplier portal",
-          "Added low-stock items to the cart",
-          "Submitted the order",
-          "Sent the prep list to the kitchen WhatsApp group"
-        ],
-        "ui_elements": ["Cart", "Submit order button", "Chat composer"],
-        "confidence": 0.83
-      }
-    }
+    { "chunk": 0, "app": "Pharmacy ERP", "doing": "Opening the pharmacy management system and searching the patient by name", "intent": "Locate the patient record for the refill" },
+    { "chunk": 1, "app": "Pharmacy ERP", "doing": "Checking refill eligibility and last fill date", "intent": "Confirm the refill is allowed" },
+    { "chunk": 2, "app": "Pharmacy ERP", "doing": "Verifying insurance coverage for the medication", "intent": "Make sure insurance will pay" },
+    { "chunk": 3, "app": "Pharmacy ERP", "doing": "Checking on-hand inventory for the medication", "intent": "Confirm the drug is in stock" },
+    { "chunk": 4, "app": "Pharmacy ERP", "doing": "Marking the prescription for fulfillment and notifying the patient", "intent": "Complete the refill" }
   ],
   "workflow": {
-    "title": "Daily Opening Routine",
-    "trigger": "Start of the business day, before lunch service prep begins",
-    "apps_involved": ["Toast POS", "Google Sheets", "Supplier Portal", "WhatsApp"],
+    "title": "Medication Refill Processing",
+    "trigger": "A patient requests a prescription refill by phone, app, or in person.",
+    "apps_involved": ["Pharmacy ERP / management system"],
     "required_inputs": [
-      "Yesterday's sales report",
-      "Current inventory spreadsheet",
-      "Supplier portal credentials"
+      "Patient name or date of birth",
+      "Prescription or medication name",
+      "Insurance information on file"
     ],
     "procedure": [
-      "Open the POS dashboard and review yesterday's sales by item",
-      "Compare top-selling dishes against the inventory spreadsheet",
-      "Identify ingredients below the reorder threshold",
-      "Log into the supplier portal and add low-stock items to the cart",
-      "Submit the produce order",
-      "Send the prep list to the kitchen staff chat"
+      "Open the pharmacy management system.",
+      "Search for the patient by name or date of birth.",
+      "Open the prescription and check refill eligibility (refills remaining, last fill date).",
+      "Verify insurance coverage for the medication.",
+      "Check on-hand inventory for the medication.",
+      "If in stock, mark the prescription for fulfillment.",
+      "If out of stock, create a supplier restock order.",
+      "Notify the patient when the prescription is ready for pickup."
     ],
     "decision_points": [
-      "If an ingredient is above its reorder threshold, skip it from the order",
-      "If a top seller is at risk of selling out, flag it as a menu availability concern"
+      "Is the refill still eligible (refills remaining, not too early)?",
+      "Is the medication covered by the patient's insurance?",
+      "Is the medication currently in stock?"
     ],
     "exceptions": [
-      "Supplier portal is down — fall back to phoning the order in",
-      "An item is out of stock at the supplier — pick a substitute or alert the chef"
+      "Insurance is rejected: contact the prescriber for a prior authorization, or offer the patient the cash price; do not dispense until resolved.",
+      "Refill is too early: tell the patient the earliest eligible date and note the request.",
+      "Medication out of stock: create a supplier restock order and give the patient an estimated ready date.",
+      "No refills remaining: fax or message the prescriber for a new prescription before proceeding."
     ],
     "suggested_automations": [
-      "Sales Summary Agent — pulls and summarizes yesterday's POS sales",
-      "Inventory Gap Agent — flags ingredients below threshold",
-      "Supplier Ordering Agent — drafts the produce cart for approval",
-      "Staff Briefing Agent — posts the prep list to the kitchen chat"
+      "Auto-check refill eligibility and insurance the moment a refill request arrives.",
+      "Auto-draft a supplier restock order when stock is below threshold.",
+      "Auto-send the patient a pickup-ready text message."
     ]
   },
   "clarifying_questions": [
-    {
-      "id": "reorder-threshold",
-      "question": "How do you decide an ingredient is low enough to reorder?",
-      "why": "Pins down the exact rule the Inventory Gap Agent should apply."
-    },
-    {
-      "id": "order-approval",
-      "question": "Should the supplier order be submitted automatically or wait for your approval?",
-      "why": "Determines whether the Supplier Ordering Agent acts or only drafts."
-    },
-    {
-      "id": "handoff-target",
-      "question": "Who on the kitchen team needs the prep list, and on which channel?",
-      "why": "Defines where the Staff Briefing Agent should post."
-    }
+    { "id": "rejection-handling", "question": "When insurance is rejected, do you always call the prescriber, or sometimes offer cash price first?", "why": "The exception branch changes the steps." },
+    { "id": "early-refill-window", "question": "How many days early will you still fill a refill?", "why": "Defines the 'too early' decision point." }
   ]
 }

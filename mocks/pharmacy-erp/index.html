@@ -38,7 +38,7 @@
   <div class="tb-sep"></div>
   <button class="tb-btn" data-nav="patients"><span class="tb-ico">👤</span><br>Patient</button>
   <button class="tb-btn" data-nav="rx-new"><span class="tb-ico">℞</span><br>New Rx</button>
-  <button class="tb-btn" data-nav="rx-refill"><span class="tb-ico">↻</span><br>Refill</button>
+  <button class="tb-btn" id="btn-refill-wf" style="background:#000080;color:#fff;font-weight:bold;"><span class="tb-ico" style="color:#fff;">↻</span><br>Refill Wf</button>
   <button class="tb-btn" data-nav="rx-queue"><span class="tb-ico">≡</span><br>Queue</button>
   <div class="tb-sep"></div>
   <button class="tb-btn" data-nav="inventory"><span class="tb-ico">▦</span><br>Inventory</button>
@@ -75,6 +75,7 @@
           <span class="tree-toggle">▼</span> 📂 Prescriptions
         </div>
         <div class="tree-children indent-2">
+          <div class="tree-node" data-nav="refill-workflow" style="font-weight:bold;background:#e0e8ff;">↻ Refill Workflow</div>
           <div class="tree-node" data-nav="rx-queue">≡ Refill Queue</div>
           <div class="tree-node" data-nav="rx-new">℞ New Prescription</div>
           <div class="tree-node" data-nav="rx-history">⌚ Rx History</div>

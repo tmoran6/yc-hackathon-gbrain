@@ -1,87 +1,135 @@
-import { spawnGbrain } from "@/lib/gbrain";
+import { gbrainQuery, parseSlug, gbrainGet } from "@/lib/gbrain";
 
 export const runtime = "nodejs";
-
-/**
- * POST /api/brain/ask — see contracts/api.md.
- *
- * Runs `gbrain query "<question>"` and streams stdout back as text/plain so
- * the UI can render the answer incrementally.
- */
 
 type AskBody = {
   question?: unknown;
 };
-
-function errorResponse(message: string) {
-  return new Response(message, {
-    status: 500,
-    headers: { "Content-Type": "text/plain; charset=utf-8" },
-  });
-}
 
 export async function POST(req: Request) {
   let body: AskBody;
   try {
     body = (await req.json()) as AskBody;
   } catch {
-    return errorResponse("body must be JSON");
+    return new Response("body must be JSON", { status: 400 });
   }
 
-  if (typeof body.question !== "string" || !body.question.trim()) {
-    return errorResponse("question is required");
+  const question = typeof body.question === "string" ? body.question.trim() : "";
+  if (!question) {
+    return new Response("question is required", { status: 400 });
   }
-  const question = body.question.trim();
 
-  const child = spawnGbrain(["query", question]);
-
-  // Wait until the process is confirmed running (or fails to spawn) before
-  // committing to a streamed 200 — this lets a missing `gbrain` binary or a
-  // spawn failure surface as a proper 500.
   try {
-    await new Promise<void>((resolve, reject) => {
-      child.once("spawn", () => resolve());
-      child.once("error", (err) => reject(err));
+    // Step 1: Retrieve — capped at 8s to avoid hanging synthesis
+    const queryOutput = gbrainQuery(question);
+    const slug = parseSlug(queryOutput);
+
+    if (!slug) {
+      return new Response(
+        "No relevant skill found in the brain for that question.",
+        {
+          status: 200,
+          headers: { "Content-Type": "text/plain; charset=utf-8" },
+        },
+      );
+    }
+
+    // Step 2: Fetch the full skill page
+    const page = gbrainGet(slug);
+
+    // Step 3: Stream a direct Anthropic claude-sonnet-4-6 call
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      return new Response("ANTHROPIC_API_KEY not configured", { status: 500 });
+    }
+
+    const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 400,
+        stream: true,
+        system:
+          "You are the company brain for a small pharmacy. Answer the employee's question " +
+          "using ONLY the captured skill below. Be concise and practical, like a coworker.",
+        messages: [
+          {
+            role: "user",
+            content: `SKILL PAGE:\n${page}\n\nQUESTION: ${question}`,
+          },
+        ],
+      }),
     });
-  } catch (err) {
-    return errorResponse(`gbrain query failed: ${(err as Error).message}`);
-  }
 
-  let stderr = "";
-  child.stderr.on("data", (d: Buffer) => {
-    stderr += d.toString();
-  });
+    if (!anthropicRes.ok) {
+      const errText = await anthropicRes.text();
+      return new Response(`Anthropic error: ${errText}`, { status: 500 });
+    }
 
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      child.stdout.on("data", (d: Buffer) => {
-        controller.enqueue(new Uint8Array(d));
-      });
-      child.stdout.on("error", (err) => {
-        controller.error(err);
-      });
-      child.on("close", (code) => {
-        // Surface a non-zero exit inline — headers are already sent, so this
-        // is the only channel left to report the failure to the client.
-        if (code !== 0) {
-          const detail = stderr.trim() || `gbrain query exited ${code}`;
-          controller.enqueue(
-            new TextEncoder().encode(`\n[error] ${detail}\n`),
-          );
+    if (!anthropicRes.body) {
+      return new Response("No response body from Anthropic", { status: 500 });
+    }
+
+    // Transform the Anthropic SSE stream → plain text stream
+    const transformedStream = new ReadableStream({
+      async start(controller) {
+        const reader = anthropicRes.body!.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            // Keep the last (possibly incomplete) line in the buffer
+            buffer = lines.pop() ?? "";
+
+            for (const line of lines) {
+              if (!line.startsWith("data: ")) continue;
+              const data = line.slice(6).trim();
+              if (data === "[DONE]") continue;
+
+              try {
+                const event = JSON.parse(data) as {
+                  type: string;
+                  delta?: { type: string; text?: string };
+                };
+                if (
+                  event.type === "content_block_delta" &&
+                  event.delta?.type === "text_delta" &&
+                  event.delta.text
+                ) {
+                  controller.enqueue(new TextEncoder().encode(event.delta.text));
+                }
+              } catch {
+                // skip malformed SSE lines
+              }
+            }
+          }
+        } finally {
+          controller.close();
         }
-        controller.close();
-      });
-    },
-    cancel() {
-      child.kill();
-    },
-  });
+      },
+    });
 
-  return new Response(stream, {
-    status: 200,
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Cache-Control": "no-store",
-    },
-  });
+    return new Response(transformedStream, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Transfer-Encoding": "chunked",
+        "Cache-Control": "no-cache",
+      },
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return new Response(message, { status: 500 });
+  }
 }
