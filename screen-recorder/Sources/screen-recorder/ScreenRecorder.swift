@@ -1,14 +1,17 @@
+import AVFoundation
 import Cocoa
 import ScreenCaptureKit
 
 final class ScreenRecorder {
     private(set) var isRecording = false
     private(set) var frameCount = 0
+    private(set) var isRecordingAudio = false
     var onStateChange: (() -> Void)?
 
     private var timer: Timer?
     private var sessionDir: URL?
     private var inFlight = false
+    private var audioRecorder: AVAudioRecorder?
 
     static var baseDirectory: URL {
         let movies = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask).first
@@ -16,7 +19,7 @@ final class ScreenRecorder {
         return movies.appendingPathComponent("ScreenRecorder")
     }
 
-    func start() {
+    func start(withAudio: Bool) {
         guard !isRecording else { return }
 
         let formatter = DateFormatter()
@@ -36,7 +39,11 @@ final class ScreenRecorder {
         isRecording = true
         onStateChange?()
 
-        NSLog("ScreenRecorder: started -> \(dir.path)")
+        NSLog("ScreenRecorder: started -> \(dir.path) (audio: \(withAudio))")
+
+        if withAudio {
+            startAudioRecording(in: dir)
+        }
 
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             self?.captureFrame()
@@ -49,11 +56,47 @@ final class ScreenRecorder {
         timer?.invalidate()
         timer = nil
         isRecording = false
+        stopAudioRecording()
         if let dir = sessionDir {
             NSLog("ScreenRecorder: stopped. \(frameCount) frames in \(dir.path)")
         }
         sessionDir = nil
         onStateChange?()
+    }
+
+    private func startAudioRecording(in dir: URL) {
+        let audioURL = dir.appendingPathComponent("audio.m4a")
+        let settings: [String: Any] = [
+            AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+            AVSampleRateKey: 44_100.0,
+            AVNumberOfChannelsKey: 1,
+            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue,
+        ]
+
+        AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
+            DispatchQueue.main.async {
+                guard let self = self, self.isRecording else { return }
+                guard granted else {
+                    NSLog("ScreenRecorder: microphone access denied")
+                    return
+                }
+                do {
+                    let recorder = try AVAudioRecorder(url: audioURL, settings: settings)
+                    recorder.record()
+                    self.audioRecorder = recorder
+                    self.isRecordingAudio = true
+                    self.onStateChange?()
+                } catch {
+                    NSLog("ScreenRecorder: failed to start audio recording: \(error)")
+                }
+            }
+        }
+    }
+
+    private func stopAudioRecording() {
+        audioRecorder?.stop()
+        audioRecorder = nil
+        isRecordingAudio = false
     }
 
     private func captureFrame() {
