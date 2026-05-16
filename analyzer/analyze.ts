@@ -76,6 +76,7 @@ interface Options {
   maxDim: number;
   jpegQuality: number;
   dryRun: boolean;
+  dashboardURL: string;
 }
 
 // ---------- config / args ----------
@@ -122,6 +123,11 @@ function parseArgs(): Options {
     maxDim: Number(get("--max-dim") || 1280),
     jpegQuality: Number(get("--jpeg-quality") || 65),
     dryRun: has("--dry-run"),
+    dashboardURL: (
+      get("--dashboard-url") ||
+      process.env.DASHBOARD_URL ||
+      "http://localhost:3000"
+    ).replace(/\/+$/, ""),
   };
 }
 
@@ -483,7 +489,60 @@ async function analyzeSession(opts: Options, sessionDir: string) {
 
   printSummary(output);
   console.log(`\n✓ Written:\n  ${sessionOut}\n  ${repoOut}\n`);
+
+  await pushAnalysis(opts, sessionDir, output);
   return output;
+}
+
+// Push the analysis to the dashboard, which upserts it into the Supabase
+// `analysis` table keyed by the session_id the screen-recorder wrote into
+// session.json. Best-effort: a failure here never fails the local analysis.
+async function pushAnalysis(opts: Options, sessionDir: string, output: unknown) {
+  const manifestPath = join(sessionDir, "session.json");
+  if (!existsSync(manifestPath)) {
+    console.log(
+      `  ⓘ no session.json in ${basename(sessionDir)} — skipping dashboard push`,
+    );
+    console.log(
+      `    (the screen-recorder writes it after it registers the session)`,
+    );
+    return;
+  }
+
+  let sessionId: string | undefined;
+  try {
+    sessionId = JSON.parse(readFileSync(manifestPath, "utf8"))?.session_id;
+  } catch (e) {
+    console.error(`  ✗ could not parse ${manifestPath}: ${String(e)}`);
+    return;
+  }
+  if (!sessionId) {
+    console.error(`  ✗ session.json has no session_id — skipping push`);
+    return;
+  }
+
+  const url = `${opts.dashboardURL}/api/sessions/${sessionId}/analysis`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ recording: basename(sessionDir), result: output }),
+    });
+    if (!res.ok) {
+      console.error(
+        `  ✗ dashboard push failed HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`,
+      );
+      return;
+    }
+    const row: any = await res.json().catch(() => ({}));
+    console.log(
+      `  ✓ pushed analysis → Supabase (analysis ${row.id ?? "ok"}) for session ${sessionId}`,
+    );
+  } catch (e) {
+    console.error(
+      `  ✗ dashboard push error: ${String(e)} — is the dashboard running at ${opts.dashboardURL}?`,
+    );
+  }
 }
 
 async function synthesizeWorkflow(opts: Options, results: ChunkResult[], audio: AudioResult): Promise<Workflow> {
@@ -536,6 +595,7 @@ function printSummary(o: any) {
 async function watchAndAnalyze(opts: Options) {
   console.log(`👀 Watch mode — waiting for an active recording session in ${RECORDINGS_DIR}`);
   console.log(`   (start/stop the recording in the Swift menu-bar app; analysis runs ${opts.idleSeconds}s after frames stop)`);
+  console.log(`   on stop: analyze → POST ${opts.dashboardURL}/api/sessions/<id>/analysis → Supabase analysis table`);
 
   const analyzed = new Set<string>();
   let lastCount = -1;

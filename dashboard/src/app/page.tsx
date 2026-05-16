@@ -10,13 +10,16 @@ type SessionRow = {
   status: "active" | "ended";
   started_at: Date;
   ended_at: Date | null;
+  workflow_title: string | null;
 };
 
 export default async function Home() {
   const { rows } = await pool.query<SessionRow>(
-    `SELECT id, username, status, started_at, ended_at
-       FROM sessions
-       ORDER BY started_at DESC
+    `SELECT s.id, s.username, s.status, s.started_at, s.ended_at,
+            a.result -> 'workflow' ->> 'title' AS workflow_title
+       FROM sessions s
+       LEFT JOIN analysis a ON a.session_id = s.id
+       ORDER BY s.started_at DESC
        LIMIT 200`,
   );
 
@@ -55,6 +58,7 @@ export default async function Home() {
                 <th style={th}>Ended</th>
                 <th style={th}>Duration</th>
                 <th style={th}>Status</th>
+                <th style={th}>Analysis</th>
               </tr>
             </thead>
             <tbody>
@@ -82,6 +86,19 @@ export default async function Home() {
                   </td>
                   <td style={td}>
                     <span style={statusPill(row.status)}>{row.status}</span>
+                  </td>
+                  <td style={td}>
+                    {row.workflow_title ? (
+                      <Link
+                        href={`/sessions/${row.id}`}
+                        title={row.workflow_title}
+                        style={analysisPill}
+                      >
+                        ✓ {truncate(row.workflow_title, 40)}
+                      </Link>
+                    ) : (
+                      <span style={{ opacity: 0.4 }}>—</span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -117,4 +134,24 @@ function statusPill(status: "active" | "ended"): React.CSSProperties {
     background: status === "active" ? "#1b3a2b" : "#23272d",
     color: status === "active" ? "#65d195" : "#9aa4ad",
   };
+}
+
+const analysisPill: React.CSSProperties = {
+  display: "inline-block",
+  maxWidth: 280,
+  padding: "2px 8px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 500,
+  background: "#13233a",
+  color: "#79b8ff",
+  textDecoration: "none",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  verticalAlign: "middle",
+};
+
+function truncate(s: string, n: number): string {
+  return s.length > n ? `${s.slice(0, n - 1)}…` : s;
 }

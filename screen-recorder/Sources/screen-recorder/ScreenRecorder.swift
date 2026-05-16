@@ -31,6 +31,24 @@ final class ScreenRecorder {
         return movies.appendingPathComponent("ScreenRecorder")
     }
 
+    /// Persist the dashboard session id into the local recording folder so the
+    /// analyzer can attach its output to the right `sessions` row.
+    static func writeSessionManifest(dir: URL, sessionID: String, username: String) {
+        let manifest: [String: Any] = [
+            "session_id": sessionID,
+            "username": username,
+            "started_at": ISO8601DateFormatter().string(from: Date()),
+        ]
+        do {
+            let data = try JSONSerialization.data(
+                withJSONObject: manifest, options: [.prettyPrinted])
+            try data.write(to: dir.appendingPathComponent("session.json"))
+            NSLog("ScreenRecorder: wrote session.json (\(sessionID))")
+        } catch {
+            NSLog("ScreenRecorder: failed to write session.json: \(error)")
+        }
+    }
+
     func start(withAudio: Bool, username: String) {
         guard !isRecording else { return }
 
@@ -59,6 +77,8 @@ final class ScreenRecorder {
             do {
                 let info = try await uploader.register(username: username)
                 NSLog("ScreenRecorder: registered session \(info.id)")
+                Self.writeSessionManifest(
+                    dir: dir, sessionID: info.id, username: username)
             } catch {
                 NSLog("ScreenRecorder: session registration failed: \(error)")
             }

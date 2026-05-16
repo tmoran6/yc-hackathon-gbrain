@@ -4,6 +4,7 @@ import { pool } from "@/lib/db";
 import { fetchObjectText, listObjects, publicUrl } from "@/lib/storage";
 import { formatDuration, formatTimestamp } from "@/lib/format";
 import SessionViewer from "./SessionViewer";
+import AnalysisPanel, { type AnalyzerResult } from "./AnalysisPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,18 @@ export default async function SessionPage({
   );
   if (rows.length === 0) notFound();
   const session = rows[0];
+
+  const analysisRes = await pool.query<{
+    result: AnalyzerResult;
+    recording: string | null;
+    updated_at: Date;
+  }>(
+    `SELECT result, recording, updated_at
+       FROM analysis
+       WHERE session_id = $1`,
+    [id],
+  );
+  const analysis = analysisRes.rows[0] ?? null;
 
   const [screenshotObjs, transcriptObjs] = await Promise.all([
     listObjects(`${id}/screenshots/`).catch((err) => {
@@ -97,6 +110,12 @@ export default async function SessionPage({
           />
         </div>
       </header>
+
+      <AnalysisPanel
+        result={analysis?.result ?? null}
+        recording={analysis?.recording ?? null}
+        updatedAt={analysis?.updated_at ?? null}
+      />
 
       <SessionViewer screenshots={screenshots} transcripts={transcripts} />
     </main>
