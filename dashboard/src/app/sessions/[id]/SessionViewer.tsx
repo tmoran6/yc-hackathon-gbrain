@@ -20,30 +20,90 @@ export default function SessionViewer({
   );
 }
 
+// How many frames ahead to keep warm in the browser cache while playing/scrubbing.
+const PREFETCH_AHEAD = 8;
+// Playback rate when Play is active (frames per second).
+const PLAYBACK_FPS = 2;
+
 function ScreenshotPanel({ screenshots }: { screenshots: Screenshot[] }) {
   const [idx, setIdx] = useState(0);
+  const [playing, setPlaying] = useState(false);
   const total = screenshots.length;
   const imgRef = useRef<HTMLImageElement>(null);
   const [imgHeight, setImgHeight] = useState(0);
+  // Track frames whose <link rel=preload> we've already injected so we don't
+  // spam the DOM with duplicates on every idx change.
+  const prefetchedRef = useRef<Set<number>>(new Set());
 
   function captureHeight() {
     const h = imgRef.current?.getBoundingClientRect().height ?? 0;
     if (h > 0) setImgHeight(h);
   }
 
+  // Pre-fetch the next N frames whenever the current index moves. Using
+  // <link rel=preload as=image> lets the browser cache the bytes so when the
+  // <img src> flips, it shows instantly.
+  useEffect(() => {
+    if (total === 0) return;
+    const upper = Math.min(total - 1, idx + PREFETCH_AHEAD);
+    const added: HTMLLinkElement[] = [];
+    for (let i = idx; i <= upper; i++) {
+      if (prefetchedRef.current.has(i)) continue;
+      const link = document.createElement("link");
+      link.rel = "preload";
+      link.as = "image";
+      link.href = screenshots[i].url;
+      document.head.appendChild(link);
+      prefetchedRef.current.add(i);
+      added.push(link);
+    }
+    return () => {
+      // Leave the prefetch hints in place — once injected they've already
+      // served their purpose. (Browsers don't re-fetch on element removal.)
+    };
+  }, [idx, total, screenshots]);
+
+  // Clamp out-of-range indices when the screenshot list shrinks.
   useEffect(() => {
     if (idx > total - 1) setIdx(Math.max(0, total - 1));
   }, [idx, total]);
 
+  // Auto-stop at the end of the reel.
+  useEffect(() => {
+    if (playing && idx >= total - 1) setPlaying(false);
+  }, [playing, idx, total]);
+
+  // Drive the playhead forward while playing.
+  useEffect(() => {
+    if (!playing) return;
+    const id = window.setInterval(() => {
+      setIdx((i) => (i >= total - 1 ? i : i + 1));
+    }, 1000 / PLAYBACK_FPS);
+    return () => window.clearInterval(id);
+  }, [playing, total]);
+
+  // Keyboard: Space toggles play, arrows step (and pause if you scrub).
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (total === 0) return;
-      if (e.key === "ArrowLeft") setIdx((i) => Math.max(0, i - 1));
-      if (e.key === "ArrowRight") setIdx((i) => Math.min(total - 1, i + 1));
+      const tag = (e.target as HTMLElement | null)?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+      if (e.key === "ArrowLeft") {
+        setPlaying(false);
+        setIdx((i) => Math.max(0, i - 1));
+      } else if (e.key === "ArrowRight") {
+        setPlaying(false);
+        setIdx((i) => Math.min(total - 1, i + 1));
+      } else if (e.key === " " || e.code === "Space") {
+        e.preventDefault();
+        setPlaying((p) => !p);
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [total]);
+
+  const atEnd = idx >= total - 1;
 
   return (
     <section
@@ -125,28 +185,51 @@ function ScreenshotPanel({ screenshots }: { screenshots: Screenshot[] }) {
           >
             <button
               type="button"
-              onClick={() => setIdx((i) => Math.max(0, i - 1))}
+              onClick={() => {
+                setPlaying(false);
+                setIdx((i) => Math.max(0, i - 1));
+              }}
               disabled={idx === 0}
               style={buttonStyle(idx === 0)}
+              title="Previous frame"
             >
-              ← Prev
+              ←
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (atEnd) setIdx(0);
+                setPlaying((p) => !p);
+              }}
+              disabled={total <= 1}
+              style={playButtonStyle(total <= 1, playing)}
+              title={playing ? "Pause" : "Play"}
+            >
+              {playing ? "❚❚ Pause" : atEnd ? "↻ Replay" : "▶ Play"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPlaying(false);
+                setIdx((i) => Math.min(total - 1, i + 1));
+              }}
+              disabled={idx >= total - 1}
+              style={buttonStyle(idx >= total - 1)}
+              title="Next frame"
+            >
+              →
             </button>
             <input
               type="range"
               min={0}
               max={Math.max(0, total - 1)}
               value={idx}
-              onChange={(e) => setIdx(Number(e.target.value))}
+              onChange={(e) => {
+                setPlaying(false);
+                setIdx(Number(e.target.value));
+              }}
               style={{ flex: 1, accentColor: "#79b8ff" }}
             />
-            <button
-              type="button"
-              onClick={() => setIdx((i) => Math.min(total - 1, i + 1))}
-              disabled={idx >= total - 1}
-              style={buttonStyle(idx >= total - 1)}
-            >
-              Next →
-            </button>
           </div>
           <div
             style={{
@@ -155,7 +238,7 @@ function ScreenshotPanel({ screenshots }: { screenshots: Screenshot[] }) {
               opacity: 0.5,
             }}
           >
-            Tip: use ← → arrow keys to scrub.
+            Space = play/pause · ← → step frame · {PLAYBACK_FPS} fps · pre-fetching {PREFETCH_AHEAD} ahead
           </div>
         </>
       )}
@@ -245,5 +328,20 @@ function buttonStyle(disabled: boolean): React.CSSProperties {
     color: disabled ? "#555" : "#e8e8e8",
     fontSize: 13,
     cursor: disabled ? "not-allowed" : "pointer",
+    minWidth: 40,
+  };
+}
+
+function playButtonStyle(disabled: boolean, playing: boolean): React.CSSProperties {
+  return {
+    padding: "6px 16px",
+    borderRadius: 6,
+    border: "1px solid #2c6b40",
+    background: disabled ? "#161a20" : playing ? "#3a2e10" : "#1f4d2e",
+    color: disabled ? "#555" : playing ? "#ffcc66" : "#a4eebd",
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: disabled ? "not-allowed" : "pointer",
+    minWidth: 100,
   };
 }

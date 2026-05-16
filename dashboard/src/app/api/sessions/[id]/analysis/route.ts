@@ -45,14 +45,17 @@ export async function POST(
     session_id: string;
     created_at: Date;
     updated_at: Date;
+    review_state: string;
   }>(
-    `INSERT INTO analysis (session_id, recording, result)
-     VALUES ($1, $2, $3)
+    `INSERT INTO analysis (session_id, recording, result, edits, review_state)
+     VALUES ($1, $2, $3, '{}'::jsonb, 'user_review')
      ON CONFLICT (session_id) DO UPDATE
-       SET result     = EXCLUDED.result,
-           recording  = EXCLUDED.recording,
-           updated_at = now()
-     RETURNING id, session_id, created_at, updated_at`,
+       SET result       = EXCLUDED.result,
+           recording    = EXCLUDED.recording,
+           edits        = '{}'::jsonb,
+           review_state = 'user_review',
+           updated_at   = now()
+     RETURNING id, session_id, created_at, updated_at, review_state`,
     [id, recording, JSON.stringify(body.result)],
   );
 

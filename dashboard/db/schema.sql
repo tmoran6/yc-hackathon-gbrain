@@ -31,3 +31,39 @@ CREATE INDEX IF NOT EXISTS sessions_username_started_at_idx
 
 CREATE INDEX IF NOT EXISTS sessions_status_idx
   ON sessions (status);
+
+-- Analysis results from the local analyzer (Gemini-based).
+-- One row per session (PK on session_id). `result` is the raw analyzer JSON;
+-- `edits` overlays user edits made in the dashboard review screen.
+CREATE TABLE IF NOT EXISTS analysis (
+  id            uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id    uuid        NOT NULL UNIQUE REFERENCES sessions(id) ON DELETE CASCADE,
+  recording     text,
+  result        jsonb       NOT NULL,
+  edits         jsonb       NOT NULL DEFAULT '{}'::jsonb,
+  review_state  text        NOT NULL DEFAULT 'user_review'
+                            CHECK (review_state IN ('user_review', 'confirmed', 'discarded')),
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now()
+);
+
+-- Idempotent column adds for pre-existing analysis tables that pre-date the
+-- review-state / edits columns.
+ALTER TABLE analysis
+  ADD COLUMN IF NOT EXISTS edits        jsonb       NOT NULL DEFAULT '{}'::jsonb;
+
+ALTER TABLE analysis
+  ADD COLUMN IF NOT EXISTS review_state text        NOT NULL DEFAULT 'user_review';
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+      FROM pg_constraint
+     WHERE conname = 'analysis_review_state_check'
+  ) THEN
+    ALTER TABLE analysis
+      ADD CONSTRAINT analysis_review_state_check
+      CHECK (review_state IN ('user_review', 'confirmed', 'discarded'));
+  END IF;
+END$$;

@@ -1,4 +1,5 @@
 import { formatTimestamp } from "@/lib/format";
+import type { AnalysisEdits } from "./UserReviewPanel";
 
 // Shape of the analyzer's JSON output (analyzer/analyze.ts). Everything is
 // optional/defensive — it comes from an external Gemini pipeline.
@@ -37,14 +38,25 @@ export type AnalyzerResult = {
     exceptions?: string[];
     suggested_automations?: string[];
   };
+  clarifying_questions?: Array<{
+    id: string;
+    question: string;
+    why?: string;
+  }>;
 };
+
+export type ReviewState = "user_review" | "confirmed" | "discarded";
 
 export default function AnalysisPanel({
   result,
+  edits,
+  reviewState,
   recording,
   updatedAt,
 }: {
   result: AnalyzerResult | null;
+  edits: AnalysisEdits | null;
+  reviewState: ReviewState | null;
   recording: string | null;
   updatedAt: Date | null;
 }) {
@@ -63,14 +75,26 @@ export default function AnalysisPanel({
     );
   }
 
-  const wf = result.workflow ?? {};
+  const wfEdit = edits?.workflow ?? {};
+  const wfRaw = result.workflow ?? {};
+  const wf = { ...wfRaw, ...wfEdit };
   const steps = result.steps ?? [];
   const audio = result.audio;
+  const answers = edits?.answers ?? {};
+  const questions = result.clarifying_questions ?? [];
 
   return (
     <section style={card}>
       <div style={sectionHead}>
-        <h2 style={h2}>Analysis</h2>
+        <h2 style={h2}>
+          Analysis
+          {reviewState === "confirmed" && (
+            <span style={confirmedBadge}>✓ confirmed</span>
+          )}
+          {reviewState === "discarded" && (
+            <span style={discardedBadge}>discarded</span>
+          )}
+        </h2>
         <div style={metaRow}>
           {result.model && <span style={meta}>model {result.model}</span>}
           {typeof result.duration_sec === "number" && (
@@ -108,6 +132,32 @@ export default function AnalysisPanel({
           <p style={{ margin: 0, fontSize: 14, opacity: 0.85 }}>
             {audio.summary}
           </p>
+        </div>
+      )}
+
+      {questions.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <div style={label}>Clarifying questions</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {questions.map((q) => {
+              const a = (answers as Record<string, string>)[q.id]?.trim() ?? "";
+              return (
+                <div key={q.id} style={qaCard}>
+                  <div style={{ fontSize: 14 }}>{q.question}</div>
+                  <div
+                    style={{
+                      marginTop: 4,
+                      fontSize: 13,
+                      opacity: a ? 0.85 : 0.45,
+                      fontStyle: a ? undefined : "italic",
+                    }}
+                  >
+                    {a || "no answer"}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -333,4 +383,33 @@ const codeInline: React.CSSProperties = {
   padding: "1px 5px",
   borderRadius: 4,
   fontSize: 12,
+};
+
+const confirmedBadge: React.CSSProperties = {
+  marginLeft: 10,
+  fontSize: 11,
+  fontWeight: 500,
+  color: "#65d195",
+  background: "#1b3a2b",
+  padding: "2px 8px",
+  borderRadius: 999,
+  verticalAlign: "middle",
+};
+
+const discardedBadge: React.CSSProperties = {
+  marginLeft: 10,
+  fontSize: 11,
+  fontWeight: 500,
+  color: "#9aa4ad",
+  background: "#23272d",
+  padding: "2px 8px",
+  borderRadius: 999,
+  verticalAlign: "middle",
+};
+
+const qaCard: React.CSSProperties = {
+  border: "1px solid #1f242b",
+  borderRadius: 6,
+  padding: "8px 12px",
+  background: "#11151a",
 };

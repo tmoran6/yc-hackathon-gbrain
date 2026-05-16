@@ -64,6 +64,12 @@ interface Workflow {
   suggested_automations: string[];
 }
 
+interface ClarifyingQuestion {
+  id: string;
+  question: string;
+  why: string;
+}
+
 interface Options {
   session: string | null;
   chunkSeconds: number;
@@ -358,6 +364,25 @@ const WORKFLOW_SCHEMA = {
   ],
 };
 
+const CLARIFYING_QUESTIONS_SCHEMA = {
+  type: "object",
+  properties: {
+    questions: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          question: { type: "string" },
+          why: { type: "string" },
+        },
+        required: ["id", "question", "why"],
+      },
+    },
+  },
+  required: ["questions"],
+};
+
 // ---------- audio ----------
 
 async function analyzeAudio(opts: Options, sessionDir: string): Promise<AudioResult> {
@@ -471,6 +496,14 @@ async function analyzeSession(opts: Options, sessionDir: string) {
   console.log(`  → synthesizing reusable workflow…`);
   const workflow = await synthesizeWorkflow(opts, results, audio);
 
+  console.log(`  → generating clarifying questions for user review…`);
+  const clarifying_questions = await generateClarifyingQuestions(
+    opts,
+    results,
+    workflow,
+    audio,
+  );
+
   const output = {
     generated_at: new Date().toISOString(),
     model: opts.model,
@@ -482,6 +515,7 @@ async function analyzeSession(opts: Options, sessionDir: string) {
     audio,
     steps: results,
     workflow,
+    clarifying_questions,
   };
 
   const sessionOut = join(sessionDir, "analysis.json");
@@ -541,10 +575,80 @@ async function pushAnalysis(opts: Options, sessionDir: string, output: unknown) 
     console.log(
       `  ✓ pushed analysis → Supabase (analysis ${row.id ?? "ok"}) for session ${sessionId}`,
     );
+
+    const reviewURL = `${opts.dashboardURL}/sessions/${sessionId}?review=1`;
+    console.log(`  → opening review screen: ${reviewURL}`);
+    openInBrowser(reviewURL);
   } catch (e) {
     console.error(
       `  ✗ dashboard push error: ${String(e)} — is the dashboard running at ${opts.dashboardURL}?`,
     );
+  }
+}
+
+function openInBrowser(url: string) {
+  const cmd =
+    process.platform === "darwin"
+      ? "open"
+      : process.platform === "win32"
+        ? "cmd"
+        : "xdg-open";
+  const args = process.platform === "win32" ? ["/c", "start", "", url] : [url];
+  try {
+    execFileSync(cmd, args, { stdio: "ignore" });
+  } catch (e) {
+    console.error(`  ! could not auto-open browser (${String(e)}). Open manually: ${url}`);
+  }
+}
+
+async function generateClarifyingQuestions(
+  opts: Options,
+  results: ChunkResult[],
+  workflow: Workflow,
+  audio: AudioResult,
+): Promise<ClarifyingQuestion[]> {
+  const digest = results.map((r) => ({
+    chunk: r.chunk,
+    app: r.analysis.primary_app,
+    action: r.analysis.action,
+    intent: r.analysis.intent,
+    confidence: r.analysis.confidence,
+  }));
+  const parts = [
+    {
+      text: [
+        "You analyzed a screen recording of someone doing real work and synthesized",
+        "the workflow below. Now ask 3–6 short clarifying questions a non-technical",
+        "operator could answer to fill in gaps the recording alone cannot show:",
+        "the trigger, decision criteria, hidden inputs, edge cases, who hands it off",
+        "to whom, frequency, and what would make this safe to automate.",
+        "Skip anything already obvious from the procedure.",
+        "",
+        audio.available && audio.summary ? `Narration summary: ${audio.summary}` : "",
+        "",
+        "Synthesized workflow:",
+        JSON.stringify(workflow, null, 2),
+        "",
+        "Per-chunk digest:",
+        JSON.stringify(digest, null, 2),
+        "",
+        "Return JSON: { questions: [{ id, question, why }] }",
+        "- id: short kebab-case slug (e.g. 'trigger-source', 'rejection-criteria')",
+        "- question: the question in plain language, addressed to the operator",
+        "- why: one sentence on what answering unlocks",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    },
+  ];
+  try {
+    const r = (await geminiJSON(opts, parts, CLARIFYING_QUESTIONS_SCHEMA)) as {
+      questions: ClarifyingQuestion[];
+    };
+    return Array.isArray(r.questions) ? r.questions : [];
+  } catch (e) {
+    console.error(`  ! clarifying-questions generation failed: ${String(e)}`);
+    return [];
   }
 }
 

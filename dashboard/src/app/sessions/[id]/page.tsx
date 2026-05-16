@@ -5,6 +5,7 @@ import { fetchObjectText, listObjects, publicUrl } from "@/lib/storage";
 import { formatDuration, formatTimestamp } from "@/lib/format";
 import SessionViewer from "./SessionViewer";
 import AnalysisPanel, { type AnalyzerResult } from "./AnalysisPanel";
+import UserReviewPanel, { type AnalysisEdits } from "./UserReviewPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -36,8 +37,10 @@ export default async function SessionPage({
     result: AnalyzerResult;
     recording: string | null;
     updated_at: Date;
+    edits: AnalysisEdits | null;
+    review_state: "user_review" | "confirmed" | "discarded";
   }>(
-    `SELECT result, recording, updated_at
+    `SELECT result, recording, updated_at, edits, review_state
        FROM analysis
        WHERE session_id = $1`,
     [id],
@@ -111,11 +114,23 @@ export default async function SessionPage({
         </div>
       </header>
 
-      <AnalysisPanel
-        result={analysis?.result ?? null}
-        recording={analysis?.recording ?? null}
-        updatedAt={analysis?.updated_at ?? null}
-      />
+      {analysis && analysis.review_state === "user_review" ? (
+        <UserReviewPanel
+          sessionId={session.id}
+          result={analysis.result}
+          edits={analysis.edits ?? {}}
+          recording={analysis.recording}
+          updatedAt={analysis.updated_at}
+        />
+      ) : (
+        <AnalysisPanel
+          result={analysis?.result ?? null}
+          edits={analysis?.edits ?? null}
+          reviewState={analysis?.review_state ?? null}
+          recording={analysis?.recording ?? null}
+          updatedAt={analysis?.updated_at ?? null}
+        />
+      )}
 
       <SessionViewer screenshots={screenshots} transcripts={transcripts} />
     </main>
