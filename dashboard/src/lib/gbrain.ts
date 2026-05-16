@@ -48,15 +48,13 @@ export function gbrainEnv(): NodeJS.ProcessEnv {
   // Build env explicitly, spreading process.env then overriding/removing problematic vars.
   // DATABASE_URL from .env.local would cause gbrain to try a remote Postgres connection
   // instead of its local pglite DB. We must exclude it.
-  const env: NodeJS.ProcessEnv = Object.fromEntries(
-    Object.entries(process.env).filter(
-      ([k]) =>
-        k !== "DATABASE_URL" &&
-        k !== "POSTGRES_URL" &&
-        k !== "POSTGRES_PRISMA_URL" &&
-        k !== "POSTGRES_URL_NON_POOLING",
-    ),
-  );
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  // DATABASE_URL from .env.local would cause gbrain to try a remote Postgres
+  // connection instead of its local pglite DB. Remove all Postgres vars.
+  delete env.DATABASE_URL;
+  delete env.POSTGRES_URL;
+  delete env.POSTGRES_PRISMA_URL;
+  delete env.POSTGRES_URL_NON_POOLING;
   env.PATH = finalPath;
 
   // Load API keys from ~/.gbrain.env as fallback (in case Next.js didn't inject them).

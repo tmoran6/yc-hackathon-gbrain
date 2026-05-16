@@ -19,9 +19,9 @@ const colors = {
 };
 
 const SUGGESTED = [
-  "Insurance got rejected on a refill — what do I do?",
-  "What if the medication is out of stock?",
-  "How do I handle a refill with no refills remaining?",
+  "How do I register a new patient?",
+  "What information do I need to book a vaccine appointment?",
+  "How do I schedule a vaccine appointment for a patient?",
 ];
 
 type Message = {
@@ -45,73 +45,61 @@ export function BrainChat() {
     if (!question.trim() || busy) return;
     setBusy(true);
 
-    const userMsg: Message = { role: "user", text: question };
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages((prev) => [...prev, { role: "user", text: question }]);
     setInput("");
+    setMessages((prev) => [...prev, { role: "brain", text: "", streaming: true }]);
 
-    const brainMsgId = Date.now();
-    setMessages((prev) => [
-      ...prev,
-      { role: "brain", text: "", streaming: true },
-    ]);
-
-    try {
-      const res = await fetch(`${BRAIN_API_BASE}/ask`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question }),
-      });
-
-      if (!res.ok || !res.body) {
-        setMessages((prev) =>
-          prev.map((m, i) =>
-            i === prev.length - 1
-              ? { role: "brain", text: "Error: failed to get an answer.", streaming: false }
-              : m
-          )
-        );
-        return;
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let accumulated = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        accumulated += decoder.decode(value, { stream: true });
-        const snap = accumulated;
-        setMessages((prev) =>
-          prev.map((m, i) =>
-            i === prev.length - 1
-              ? { role: "brain", text: snap, streaming: true }
-              : m
-          )
-        );
-      }
-
-      // Mark done
+    const updateBrain = (text: string, streaming: boolean) =>
       setMessages((prev) =>
         prev.map((m, i) =>
-          i === prev.length - 1
-            ? { role: "brain", text: accumulated, streaming: false }
-            : m
-        )
+          i === prev.length - 1 ? { role: "brain", text, streaming } : m,
+        ),
       );
-    } catch {
-      setMessages((prev) =>
-        prev.map((m, i) =>
-          i === prev.length - 1
-            ? { role: "brain", text: "Error: network failure.", streaming: false }
-            : m
-        )
-      );
-    } finally {
-      setBusy(false);
-      inputRef.current?.focus();
+
+    // The ask path takes ~10-20s and runs over a tunnel — a single transient
+    // network blip would otherwise kill the answer. Retry the whole request.
+    const MAX_ATTEMPTS = 3;
+    let lastErr = "";
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const res = await fetch(`${BRAIN_API_BASE}/ask`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question }),
+        });
+        if (!res.ok || !res.body) {
+          lastErr = `server responded ${res.status}`;
+        } else {
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let accumulated = "";
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            accumulated += decoder.decode(value, { stream: true });
+            updateBrain(accumulated, true);
+          }
+          if (accumulated.trim()) {
+            updateBrain(accumulated, false);
+            setBusy(false);
+            inputRef.current?.focus();
+            return;
+          }
+          lastErr = "empty response";
+        }
+      } catch (e) {
+        lastErr = e instanceof Error ? e.message : "network error";
+      }
+      if (attempt < MAX_ATTEMPTS) {
+        await new Promise((r) => setTimeout(r, 800));
+      }
     }
-    void brainMsgId;
+    updateBrain(
+      `Sorry — couldn't reach the brain (${lastErr}). Click a suggested question to retry.`,
+      false,
+    );
+    setBusy(false);
+    inputRef.current?.focus();
   }
 
   function handleKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -294,7 +282,12 @@ export function BrainChat() {
                 color: colors.text,
               }}
             >
-              {m.text}
+              {m.text ||
+                (m.streaming && m.role === "brain" ? (
+                  <span style={{ color: colors.textDim, fontStyle: "italic" }}>
+                    Searching the captured skills…
+                  </span>
+                ) : null)}
               {m.streaming && (
                 <span
                   style={{

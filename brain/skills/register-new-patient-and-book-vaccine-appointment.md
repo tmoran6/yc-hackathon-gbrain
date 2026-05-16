@@ -1,8 +1,7 @@
-// Fixture: real recorded session b266a5c7 — Register New Patient and Book Vaccine Appointment
-export const skillPage = `# Register New Patient and Book Vaccine Appointment
+# Register New Patient and Book Vaccine Appointment
 
 A reusable skill captured from the pharmacy owner doing the task once.
-Lives at \`brain/skills/register-new-patient-and-book-vaccine-appointment.md\` once committed.
+Lives at `brain/skills/register-new-patient-and-book-vaccine-appointment.md` once committed.
 
 **Trigger:** A new patient requires registration in the pharmacy system and needs a vaccine appointment scheduled.
 
@@ -73,7 +72,6 @@ Lives at \`brain/skills/register-new-patient-and-book-vaccine-appointment.md\` o
 ## Timeline
 
 - **2026-05-16** — Skill captured from a screen recording of the owner processing
-  one refill (session \`session_2026-05-16_13-40-52\`, 60s). Analyzer segmented
+  one refill (session `session_2026-05-16_13-40-52`, 60s). Analyzer segmented
   4 steps; owner confirmed the details handling via
   clarifying questions.
-`;

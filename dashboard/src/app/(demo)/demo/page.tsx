@@ -1,12 +1,13 @@
+"use client";
+
+import { useState, useEffect, useRef, Fragment } from "react";
 import { SkillCard } from "@/components/SkillCard";
 import { CommitButton } from "@/components/CommitButton";
 import { BrainChat } from "@/components/BrainChat";
+import { ScreenRecordingStage } from "@/components/ScreenRecordingStage";
+import { AIAnalysisStage } from "@/components/AIAnalysisStage";
 import { skillPage } from "@/fixtures/skill-page";
-
-export const metadata = {
-  title: "Work Recorder — GBrain Demo",
-  description: "Record once, answer forever. A pharmacy owner captures a task and it becomes a queryable GBrain skill.",
-};
+import { analyzerOutput } from "@/fixtures/analyzer-output";
 
 const colors = {
   text: "#e8e8e8",
@@ -14,18 +15,116 @@ const colors = {
   textDim: "#6b7580",
   blue: "#79b8ff",
   green: "#65d195",
+  amber: "#f0b050",
+  purple: "#b388ff",
   border: "#1f242b",
   surface: "#11151a",
 };
 
-function StepBadge({ n, label }: { n: number; label: string }) {
+// Stage timing in milliseconds — how long to wait before unlocking the next stage
+const STAGE_DELAYS: Record<number, number> = {
+  1: 5600,  // Screen Recording: 6 frames × 900ms ≈ 5.4s + buffer
+  2: 4200,  // AI Analysis: 5 chunks × 700ms + ~700ms = 4.2s
+  3: 0,     // Skill Captured — shown immediately after analysis
+  4: 0,     // Commit — shown immediately
+  5: 0,     // Ask — shown immediately
+};
+
+const PIPELINE_STAGES = [
+  { n: 1, label: "Screen Recording", color: colors.blue, dot: "#3b6ea3" },
+  { n: 2, label: "AI Analysis", color: colors.purple, dot: "#7c4abf" },
+  { n: 3, label: "Skill Captured", color: colors.green, dot: "#2a6a45" },
+  { n: 4, label: "Commit to Brain", color: colors.amber, dot: "#7a5820" },
+  { n: 5, label: "Ask your Brain", color: colors.green, dot: "#2a6a45" },
+];
+
+function PipelinePill({
+  stage,
+  active,
+  complete,
+}: {
+  stage: (typeof PIPELINE_STAGES)[0];
+  active: boolean;
+  complete: boolean;
+}) {
+  return (
+    <div
+      style={{
+        padding: "5px 14px",
+        borderRadius: 999,
+        background: complete
+          ? `rgba(101,209,149,0.12)`
+          : active
+          ? "rgba(121,184,255,0.1)"
+          : colors.surface,
+        border: `1px solid ${
+          complete
+            ? "rgba(101,209,149,0.3)"
+            : active
+            ? "rgba(121,184,255,0.35)"
+            : colors.border
+        }`,
+        fontSize: 12,
+        fontWeight: 600,
+        color: complete ? colors.green : active ? colors.blue : colors.muted,
+        whiteSpace: "nowrap" as const,
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        transition: "all 0.4s ease",
+        boxShadow: active ? "0 0 12px rgba(121,184,255,0.15)" : "none",
+      }}
+    >
+      {complete ? (
+        <span style={{ fontSize: 10 }}>✓</span>
+      ) : active ? (
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            background: colors.blue,
+            display: "inline-block",
+            boxShadow: `0 0 6px ${colors.blue}`,
+            animation: "pulse 1.5s ease-in-out infinite",
+          }}
+        />
+      ) : (
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            background: "#2a2f3a",
+            display: "inline-block",
+          }}
+        />
+      )}
+      {stage.label}
+    </div>
+  );
+}
+
+function SectionHeader({
+  n,
+  label,
+  active,
+  complete,
+  color,
+}: {
+  n: number;
+  label: string;
+  active: boolean;
+  complete: boolean;
+  color: string;
+}) {
   return (
     <div
       style={{
         display: "flex",
         alignItems: "center",
         gap: 10,
-        marginBottom: "0.4rem",
+        marginBottom: "0.6rem",
       }}
     >
       <div
@@ -33,35 +132,107 @@ function StepBadge({ n, label }: { n: number; label: string }) {
           width: 28,
           height: 28,
           borderRadius: "50%",
-          background: "#13233a",
-          border: `1.5px solid #3b6ea3`,
+          background: active || complete ? "#13233a" : "#0e1217",
+          border: `1.5px solid ${active || complete ? "#3b6ea3" : "#2a2f3a"}`,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           fontSize: 12,
           fontWeight: 700,
-          color: colors.blue,
+          color: active || complete ? colors.blue : colors.textDim,
           flexShrink: 0,
+          transition: "all 0.4s",
         }}
       >
-        {n}
+        {complete ? "✓" : n}
       </div>
       <span
         style={{
           fontSize: 14,
           fontWeight: 700,
-          color: colors.text,
+          color: active || complete ? colors.text : colors.textDim,
           letterSpacing: 0.2,
+          transition: "color 0.4s",
         }}
       >
         {label}
       </span>
+      {active && (
+        <div
+          style={{
+            padding: "1px 8px",
+            background: "rgba(121,184,255,0.1)",
+            border: "1px solid rgba(121,184,255,0.25)",
+            borderRadius: 999,
+            fontSize: 10,
+            fontWeight: 700,
+            color: colors.blue,
+            letterSpacing: 0.5,
+            animation: "fadeIn 0.3s ease",
+          }}
+        >
+          IN PROGRESS
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LockedOverlay() {
+  return (
+    <div
+      style={{
+        height: 64,
+        background: "#0c0f14",
+        border: `1px solid ${colors.border}`,
+        borderRadius: 8,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        color: colors.textDim,
+        fontSize: 13,
+      }}
+    >
+      <span style={{ fontSize: 14 }}>🔒</span>
+      Waiting for previous stage…
     </div>
   );
 }
 
 export default function DemoPage() {
-  const SLUG = "medication-refill-processing";
+  const SLUG = "register-new-patient-and-book-vaccine-appointment";
+
+  // Stage unlock state: 0 = nothing started, 1–5 = that stage is active/complete
+  const [pipelineStarted, setPipelineStarted] = useState(false);
+  const [currentStage, setCurrentStage] = useState(0); // highest unlocked stage
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  function startPipeline() {
+    if (pipelineStarted) return;
+    setPipelineStarted(true);
+    setCurrentStage(1);
+
+    // Schedule stage unlocks
+    let cumulative = 0;
+    [1, 2, 3, 4, 5].forEach((stageNum) => {
+      cumulative += STAGE_DELAYS[stageNum] ?? 0;
+      if (stageNum < 5) {
+        const t = setTimeout(() => {
+          setCurrentStage(stageNum + 1);
+        }, cumulative);
+        timersRef.current.push(t);
+      }
+    });
+  }
+
+  useEffect(() => {
+    return () => timersRef.current.forEach(clearTimeout);
+  }, []);
+
+  const isActive = (n: number) => currentStage === n;
+  const isComplete = (n: number) => currentStage > n;
+  const isUnlocked = (n: number) => currentStage >= n;
 
   return (
     <main
@@ -98,9 +269,22 @@ export default function DemoPage() {
               background: colors.green,
               boxShadow: `0 0 6px ${colors.green}`,
               display: "inline-block",
+              animation: "pulse 2s ease-in-out infinite",
             }}
           />
-          GBrain Work Recorder
+          👁 The Eyes of the company brain
+        </div>
+
+        <div
+          style={{
+            fontSize: 14,
+            fontWeight: 600,
+            color: colors.muted,
+            marginBottom: "0.4rem",
+            letterSpacing: 0.2,
+          }}
+        >
+          GBrain gave businesses a brain.
         </div>
 
         <h1
@@ -113,7 +297,7 @@ export default function DemoPage() {
             letterSpacing: -0.5,
           }}
         >
-          Record once.{" "}
+          We built the{" "}
           <span
             style={{
               background: "linear-gradient(90deg, #79b8ff 0%, #65d195 100%)",
@@ -121,26 +305,77 @@ export default function DemoPage() {
               WebkitTextFillColor: "transparent",
             }}
           >
-            Answer forever.
+            Eyes.
           </span>
         </h1>
 
         <p
           style={{
-            margin: 0,
+            margin: "0 0 1.5rem",
             fontSize: 16,
             color: colors.muted,
             lineHeight: 1.7,
             maxWidth: 600,
           }}
         >
-          A pharmacy owner processes one insurance rejection. GBrain watches,
-          captures the workflow, and turns it into a skill — so any new hire can
-          instantly ask the brain how to handle it.
+          The Eyes <strong style={{ color: colors.text }}>watch</strong> a
+          business do its work once,{" "}
+          <strong style={{ color: colors.text }}>understand</strong> the
+          workflow, and <strong style={{ color: colors.text }}>teach</strong> it
+          to GBrain — so anyone can{" "}
+          <strong style={{ color: colors.text }}>ask</strong> the brain later.
+          Watch a pharmacy owner register a new patient and book a vaccine
+          appointment below.
         </p>
+
+        {/* Run button */}
+        {!pipelineStarted && (
+          <button
+            onClick={startPipeline}
+            style={{
+              padding: "13px 28px",
+              borderRadius: 10,
+              border: "none",
+              cursor: "pointer",
+              fontSize: 15,
+              fontWeight: 700,
+              color: "#fff",
+              background: "linear-gradient(135deg, #3b6ea3 0%, #2a5078 50%, #1d3a5c 100%)",
+              boxShadow: "0 2px 20px rgba(59,110,163,0.45)",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              letterSpacing: 0.3,
+              animation: "pulse-btn 2.5s ease-in-out infinite",
+            }}
+          >
+            <span style={{ fontSize: 18 }}>▶</span>
+            Run the pipeline
+          </button>
+        )}
+
+        {pipelineStarted && (
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "6px 14px",
+              background: "rgba(101,209,149,0.06)",
+              border: "1px solid rgba(101,209,149,0.2)",
+              borderRadius: 8,
+              fontSize: 13,
+              color: colors.green,
+              animation: "fadeIn 0.4s ease",
+            }}
+          >
+            <span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>⟳</span>
+            Pipeline running…
+          </div>
+        )}
       </div>
 
-      {/* Pipeline viz */}
+      {/* Pipeline pill row */}
       <div
         style={{
           display: "flex",
@@ -150,35 +385,26 @@ export default function DemoPage() {
           flexWrap: "wrap",
         }}
       >
-        {["Screen Recording", "AI Analysis", "Skill Captured", "Brain Query"].map(
-          (step, i, arr) => (
-            <>
-              <div
-                key={step}
+        {PIPELINE_STAGES.map((stage, i) => (
+          <Fragment key={stage.n}>
+            <PipelinePill
+              stage={stage}
+              active={isActive(stage.n)}
+              complete={isComplete(stage.n)}
+            />
+            {i < PIPELINE_STAGES.length - 1 && (
+              <span
                 style={{
-                  padding: "5px 14px",
-                  borderRadius: 999,
-                  background: i === 2 ? "rgba(101,209,149,0.12)" : "#11151a",
-                  border: `1px solid ${i === 2 ? "rgba(101,209,149,0.3)" : colors.border}`,
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: i === 2 ? colors.green : colors.muted,
-                  whiteSpace: "nowrap" as const,
+                  color: isComplete(stage.n) ? colors.green : colors.textDim,
+                  fontSize: 14,
+                  transition: "color 0.4s",
                 }}
               >
-                {step}
-              </div>
-              {i < arr.length - 1 && (
-                <span
-                  key={`arrow-${i}`}
-                  style={{ color: colors.textDim, fontSize: 14 }}
-                >
-                  &#8594;
-                </span>
-              )}
-            </>
-          )
-        )}
+                &#8594;
+              </span>
+            )}
+          </Fragment>
+        ))}
       </div>
 
       {/* Divider */}
@@ -189,55 +415,156 @@ export default function DemoPage() {
         }}
       />
 
-      {/* Section 1: Skill Captured */}
+      {/* Stage 1: Screen Recording */}
       <section style={{ marginBottom: "2.5rem" }}>
-        <StepBadge n={1} label="Skill Captured from Screen Recording" />
+        <SectionHeader
+          n={1}
+          label="Screen Recording"
+          active={isActive(1)}
+          complete={isComplete(1)}
+          color={colors.blue}
+        />
         <p
           style={{
             margin: "0 0 1rem 38px",
             fontSize: 13,
-            color: colors.textDim,
+            color: isUnlocked(1) ? colors.textDim : "#3a3f4a",
             lineHeight: 1.6,
+            transition: "color 0.4s",
           }}
         >
-          GBrain analyzed 142s of screen-recorded footage and extracted this
-          structured workflow automatically.
+          GBrain&apos;s recorder captures every screen state and click while the
+          pharmacist registers a new patient — {analyzerOutput.frame_count} frames
+          over {analyzerOutput.duration_sec}s.
         </p>
-        <SkillCard />
+        {isUnlocked(1) ? (
+          <div style={{ animation: "fadeSlideUp 0.5s ease" }}>
+            <ScreenRecordingStage playing={isActive(1) || isComplete(1)} />
+          </div>
+        ) : (
+          <LockedOverlay />
+        )}
       </section>
 
-      {/* Section 2: Commit */}
+      {/* Stage 2: AI Analysis */}
       <section style={{ marginBottom: "2.5rem" }}>
-        <StepBadge n={2} label="Commit to Brain" />
+        <SectionHeader
+          n={2}
+          label="AI Analysis"
+          active={isActive(2)}
+          complete={isComplete(2)}
+          color={colors.purple}
+        />
         <p
           style={{
             margin: "0 0 1rem 38px",
             fontSize: 13,
-            color: colors.textDim,
+            color: isUnlocked(2) ? colors.textDim : "#3a3f4a",
             lineHeight: 1.6,
+            transition: "color 0.4s",
+          }}
+        >
+          Gemini 2.0 Flash segments the recording into {analyzerOutput.steps.length} ×{" "}
+          {analyzerOutput.chunk_seconds}s chunks, identifying the app, action, and
+          intent in each — including the audio narration.
+        </p>
+        {isUnlocked(2) ? (
+          <div style={{ animation: "fadeSlideUp 0.5s ease" }}>
+            <AIAnalysisStage playing={isActive(2) || isComplete(2)} />
+          </div>
+        ) : (
+          <LockedOverlay />
+        )}
+      </section>
+
+      {/* Stage 3: Skill Captured */}
+      <section style={{ marginBottom: "2.5rem" }}>
+        <SectionHeader
+          n={3}
+          label="Skill Captured"
+          active={isActive(3)}
+          complete={isComplete(3)}
+          color={colors.green}
+        />
+        <p
+          style={{
+            margin: "0 0 1rem 38px",
+            fontSize: 13,
+            color: isUnlocked(3) ? colors.textDim : "#3a3f4a",
+            lineHeight: 1.6,
+            transition: "color 0.4s",
+          }}
+        >
+          GBrain synthesizes the chunk analysis into a structured, queryable skill —
+          procedure, decision points, exceptions, and suggested automations.
+        </p>
+        {isUnlocked(3) ? (
+          <div style={{ animation: "fadeSlideUp 0.5s ease" }}>
+            <SkillCard />
+          </div>
+        ) : (
+          <LockedOverlay />
+        )}
+      </section>
+
+      {/* Stage 4: Commit */}
+      <section style={{ marginBottom: "2.5rem" }}>
+        <SectionHeader
+          n={4}
+          label="Commit to Brain"
+          active={isActive(4)}
+          complete={isComplete(4)}
+          color={colors.amber}
+        />
+        <p
+          style={{
+            margin: "0 0 1rem 38px",
+            fontSize: 13,
+            color: isUnlocked(4) ? colors.textDim : "#3a3f4a",
+            lineHeight: 1.6,
+            transition: "color 0.4s",
           }}
         >
           Embed this skill into GBrain so all staff can query it in plain
           English — no training required.
         </p>
-        <CommitButton slug={SLUG} skillPage={skillPage} />
+        {isUnlocked(4) ? (
+          <div style={{ animation: "fadeSlideUp 0.5s ease" }}>
+            <CommitButton slug={SLUG} skillPage={skillPage} />
+          </div>
+        ) : (
+          <LockedOverlay />
+        )}
       </section>
 
-      {/* Section 3: Ask */}
+      {/* Stage 5: Ask */}
       <section style={{ marginBottom: "2rem" }}>
-        <StepBadge n={3} label="Ask your Brain" />
+        <SectionHeader
+          n={5}
+          label="Ask your Brain"
+          active={isActive(5)}
+          complete={isComplete(5)}
+          color={colors.green}
+        />
         <p
           style={{
             margin: "0 0 1rem 38px",
             fontSize: 13,
-            color: colors.textDim,
+            color: isUnlocked(5) ? colors.textDim : "#3a3f4a",
             lineHeight: 1.6,
+            transition: "color 0.4s",
           }}
         >
           A new hire asks a question in natural language. The brain answers from
           the committed skill — instantly and accurately.
         </p>
-        <BrainChat />
+        {isUnlocked(5) ? (
+          <div style={{ animation: "fadeSlideUp 0.5s ease" }}>
+            <BrainChat />
+          </div>
+        ) : (
+          <LockedOverlay />
+        )}
       </section>
 
       {/* Footer note */}
@@ -260,6 +587,28 @@ export default function DemoPage() {
         vector + keyword indexing. Questions are answered by retrieving the
         relevant skill and synthesizing a response with Claude Sonnet.
       </div>
+
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+        @keyframes pulse-btn {
+          0%, 100% { box-shadow: 0 2px 20px rgba(59,110,163,0.45); }
+          50% { box-shadow: 0 2px 32px rgba(59,110,163,0.75); }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes fadeSlideUp {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: none; }
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </main>
   );
 }
