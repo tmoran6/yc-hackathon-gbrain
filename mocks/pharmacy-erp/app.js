@@ -316,7 +316,7 @@ routes.dashboard = {
                   <td>${esc(patientName(p))}</td>
                   <td>${esc(m ? m.name : '')}</td>
                   <td>${esc(q.source)}</td>
-                  <td><span class="badge ${q.status === 'PENDING' ? '' : 'badge-ok'}">${esc(q.status)}</span></td>
+                  <td><span class="badge ${q.status === 'READY' ? 'badge-ok' : (q.status === 'REJECTED' ? 'badge-bad' : (q.status === 'ON_ORDER' ? 'badge-warn' : ''))}">${esc(q.status)}</span></td>
                 </tr>`;
               }).join('')}
               </tbody>
@@ -1592,7 +1592,7 @@ window._wf = {
         const paRequired = m.paRequired;
         if (paRequired) {
           setBody('Step 2: Insurance Adjudication — REJECTED', `
-            <div class="notice err"><b>CLAIM REJECTED</b><br>Reject Code: 75 — PRIOR AUTHORIZATION REQUIRED<br>Plan: ${esc(p.insurancePlan)}<br>Member ID: ${esc(p.insuranceId)}<br>Drug: ${esc(m.name)}</div>
+            <div class="notice err"><b>⚠ CLAIM REJECTED — INSURANCE EXCEPTION</b><br>Reject Code: 75 — PRIOR AUTHORIZATION REQUIRED<br>Plan: ${esc(p.insurancePlan)}<br>Member ID: ${esc(p.insuranceId)}<br>Drug: ${esc(m.name)}</div>
             <div>This medication requires a prior authorization from the prescriber. Initiate PA workflow to fax request to ${esc(d.name)}'s office.</div>
           `, [
             { label: 'Cancel', onClick: () => { closeModal(); item.status = 'PENDING'; saveState(); router.refresh(); resolveFn(); } },
@@ -1607,9 +1607,13 @@ window._wf = {
               saveState();
               log('PA_INITIATED', `${pa.id} for ${m.name}, patient ${p.id}`);
               toast(`Prior auth ${pa.id} initiated. Fax sent to ${d.name}.`, 'info');
-              closeModal();
-              router.refresh();
-              resolveFn();
+              setBody('Step 2: Prior Authorization Initiated', `
+                <div class="notice ok"><b>✓ PRIOR AUTHORIZATION INITIATED</b><br>PA #: ${esc(pa.id)}<br>Drug: ${esc(m.name)}<br>Prescriber: ${esc(d.name)}<br>Status: PENDING PROVIDER</div>
+                <div>A PA request has been faxed to ${esc(d.name)}'s office. The refill stays in the queue marked <b>REJECTED</b> until the prior authorization is approved. Track it in the <b>Prior Authorization Queue</b>.</div>
+              `, [
+                { label: 'Done', primary: true, onClick: () => { closeModal(); router.refresh(); resolveFn(); } },
+                { label: 'Open Prior Auth Queue ›', onClick: () => { closeModal(); router.go('rx-pa'); resolveFn(); } },
+              ]);
             }},
           ]);
         } else {
@@ -1651,7 +1655,7 @@ window._wf = {
         { label: 'Cancel', onClick: () => { closeModal(); item.status = 'PENDING'; saveState(); router.refresh(); resolveFn(); } },
         lowStock
           ? { label: '⛟ Create Supplier Order', primary: true, onClick: () => step4out(copay) }
-          : { label: '▶ Fulfill Refill', primary: true, onClick: () => step4ok(copay) },
+          : { label: '✓ Mark for Fulfillment', primary: true, onClick: () => step4ok(copay) },
       ]);
     }
 
@@ -1667,8 +1671,8 @@ window._wf = {
       item.status = 'READY';
       saveState();
       log('RX_FILLED', `${rx.id} - ${m.name} x${rx.qty} for ${patientName(p)} (copay ${fmtMoney(copay)})`);
-      setBody('Step 4: Fulfillment Complete', `
-        <div class="notice ok"><b>✓ REFILL FILLED AND LABELED</b><br>Rx Bottle Label Printed · Sticker Printed · Bagged for Will-Call</div>
+      setBody('Step 4: Marked for Fulfillment', `
+        <div class="notice ok"><b>✓ MARKED FOR FULFILLMENT — READY FOR PICKUP</b><br>Rx Bottle Label Printed · Sticker Printed · Bagged for Will-Call</div>
         <div class="form-grid">
           <label>Fill ID:</label><input readonly value="${esc(item.id)}">
           <label>Claim #:</label><input readonly value="${esc(claim.id)}">
