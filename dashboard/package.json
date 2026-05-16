@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "db:init": "node --env-file=.env.local scripts/init-db.mjs"
+    "db:init": "node --env-file=.env.local scripts/init-db.mjs",
+    "storage:init": "node --env-file=.env.local scripts/init-storage.mjs"
   },
   "dependencies": {
     "next": "^16.2.6",

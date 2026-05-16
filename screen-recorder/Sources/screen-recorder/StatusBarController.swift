@@ -146,11 +146,13 @@ final class StatusBarController: NSObject {
     }
 
     @objc private func startRecordingWithAudio() {
-        recorder.start(withAudio: true)
+        guard let user = currentUser else { return }
+        recorder.start(withAudio: true, username: user.name)
     }
 
     @objc private func startRecordingNoAudio() {
-        recorder.start(withAudio: false)
+        guard let user = currentUser else { return }
+        recorder.start(withAudio: false, username: user.name)
     }
 
     @objc private func stopRecording() {

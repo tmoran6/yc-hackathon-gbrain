@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
+import { getStorageConfig } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 
 type CreateBody = {
   username?: unknown;
-  captured_at?: unknown;
-  content_type?: unknown;
   metadata?: unknown;
 };
 
@@ -26,24 +25,19 @@ export async function POST(req: Request) {
     typeof body.username === "string" ? body.username.trim() : "";
   if (!username) return badRequest("username is required");
 
-  if (typeof body.captured_at !== "string") {
-    return badRequest("captured_at is required (ISO 8601 string)");
-  }
-  const capturedAt = new Date(body.captured_at);
-  if (Number.isNaN(capturedAt.getTime())) {
-    return badRequest("captured_at must be a valid ISO 8601 timestamp");
-  }
-
-  const contentType =
-    typeof body.content_type === "string" ? body.content_type : null;
   const metadata =
     body.metadata && typeof body.metadata === "object" ? body.metadata : {};
 
-  const { rows } = await pool.query<{ id: string; created_at: Date }>(
-    `INSERT INTO screenshots (username, captured_at, content_type, metadata)
-     VALUES ($1, $2, $3, $4)
-     RETURNING id, created_at`,
-    [username, capturedAt.toISOString(), contentType, metadata],
+  const storage = getStorageConfig();
+
+  const { rows } = await pool.query<{
+    id: string;
+    started_at: Date;
+  }>(
+    `INSERT INTO sessions (username, metadata)
+     VALUES ($1, $2)
+     RETURNING id, started_at`,
+    [username, metadata],
   );
 
   const row = rows[0];
@@ -51,9 +45,15 @@ export async function POST(req: Request) {
     {
       id: row.id,
       username,
-      captured_at: capturedAt.toISOString(),
-      status: "pending",
-      created_at: row.created_at,
+      status: "active",
+      started_at: row.started_at,
+      storage: {
+        url: storage.url,
+        key: storage.key,
+        bucket: storage.bucket,
+        screenshots_prefix: `${row.id}/screenshots/`,
+        transcripts_prefix: `${row.id}/transcripts/`,
+      },
     },
     { status: 201 },
   );
@@ -76,13 +76,12 @@ export async function GET(req: Request) {
   params.push(limit);
 
   const { rows } = await pool.query(
-    `SELECT id, username, captured_at, status, content_type, byte_size,
-            metadata, created_at, uploaded_at
-       FROM screenshots
+    `SELECT id, username, status, started_at, ended_at, metadata, created_at
+       FROM sessions
        ${where}
-       ORDER BY created_at DESC
+       ORDER BY started_at DESC
        LIMIT $${params.length}`,
     params,
   );
-  return NextResponse.json({ uploads: rows });
+  return NextResponse.json({ sessions: rows });
 }

@@ -14,14 +14,16 @@ final class AudioRecorder {
     var onStateChange: (() -> Void)?
 
     private let transcriber: ElevenLabsTranscriber
+    private let uploader: SessionUploader
     private var currentRecorder: AVAudioRecorder?
     private var rotationTimer: Timer?
     private var sessionDir: URL?
     private var chunkIndex = 0
     private var pendingTranscription: Task<Void, Never>?
 
-    init(transcriber: ElevenLabsTranscriber) {
+    init(transcriber: ElevenLabsTranscriber, uploader: SessionUploader) {
         self.transcriber = transcriber
+        self.uploader = uploader
     }
 
     func start(in dir: URL) {
@@ -97,15 +99,22 @@ final class AudioRecorder {
 
     private func enqueueTranscription(url: URL, index: Int) {
         let transcriber = self.transcriber
+        let uploader = self.uploader
         let previous = pendingTranscription
         pendingTranscription = Task.detached {
             await previous?.value
-            await Self.transcribeChunk(transcriber: transcriber, url: url, index: index)
+            await Self.transcribeChunk(
+                transcriber: transcriber,
+                uploader: uploader,
+                url: url,
+                index: index
+            )
         }
     }
 
     private static func transcribeChunk(
         transcriber: ElevenLabsTranscriber,
+        uploader: SessionUploader,
         url: URL,
         index: Int
     ) async {
@@ -126,6 +135,11 @@ final class AudioRecorder {
                 text: text
             )
             NSLog("AudioRecorder: transcribed chunk \(index) (\(text.count) chars)")
+
+            let filename = "chunk_\(String(format: "%04d", index)).txt"
+            if let data = text.data(using: .utf8) {
+                await uploader.uploadTranscript(data: data, filename: filename)
+            }
         } catch {
             NSLog("AudioRecorder: transcription failed for chunk \(index): \(error)")
         }
