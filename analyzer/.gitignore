@@ -1,0 +1,4 @@
+.gemini.key
+out/*.json
+node_modules/
+.env

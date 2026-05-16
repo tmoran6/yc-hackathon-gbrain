@@ -1,0 +1,15 @@
+{
+  "name": "work-recorder-analyzer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local pipeline: screen-recorder session -> chunked Gemini analysis -> reusable workflow JSON",
+  "scripts": {
+    "analyze": "node --experimental-strip-types analyze.ts",
+    "latest": "node --experimental-strip-types analyze.ts",
+    "watch": "node --experimental-strip-types analyze.ts --watch"
+  },
+  "engines": {
+    "node": ">=22.6.0"
+  }
+}
