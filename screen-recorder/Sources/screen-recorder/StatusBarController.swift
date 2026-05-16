@@ -75,10 +75,30 @@ final class StatusBarController: NSObject {
                 let frames = NSMenuItem(title: "Frames captured: \(recorder.frameCount)", action: nil, keyEquivalent: "")
                 frames.isEnabled = false
                 menu.addItem(frames)
+
+                let audioStatus = NSMenuItem(
+                    title: recorder.isRecordingAudio ? "Audio: recording" : "Audio: off",
+                    action: nil,
+                    keyEquivalent: ""
+                )
+                audioStatus.isEnabled = false
+                menu.addItem(audioStatus)
             } else {
-                let item = NSMenuItem(title: "Start Recording", action: #selector(startRecording), keyEquivalent: "r")
-                item.target = self
-                menu.addItem(item)
+                let withAudio = NSMenuItem(
+                    title: "Start Recording (with audio)",
+                    action: #selector(startRecordingWithAudio),
+                    keyEquivalent: "r"
+                )
+                withAudio.target = self
+                menu.addItem(withAudio)
+
+                let noAudio = NSMenuItem(
+                    title: "Start Recording (no audio)",
+                    action: #selector(startRecordingNoAudio),
+                    keyEquivalent: ""
+                )
+                noAudio.target = self
+                menu.addItem(noAudio)
             }
 
             menu.addItem(.separator())
@@ -125,8 +145,12 @@ final class StatusBarController: NSObject {
         refresh()
     }
 
-    @objc private func startRecording() {
-        recorder.start()
+    @objc private func startRecordingWithAudio() {
+        recorder.start(withAudio: true)
+    }
+
+    @objc private func startRecordingNoAudio() {
+        recorder.start(withAudio: false)
     }
 
     @objc private func stopRecording() {
