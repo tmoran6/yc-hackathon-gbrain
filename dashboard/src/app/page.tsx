@@ -47,7 +47,28 @@ export default async function Home() {
 
   return (
     <main style={{ maxWidth: 960, margin: "0 auto" }}>
-      <h1 style={{ marginBottom: "0.25rem" }}>Recording sessions</h1>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <h1 style={{ marginBottom: "0.25rem" }}>Recording sessions</h1>
+        <Link
+          href="/demo"
+          style={{
+            color: "var(--text-link)",
+            textDecoration: "none",
+            fontSize: 14,
+            fontWeight: 500,
+          }}
+        >
+          Skill capture demo →
+        </Link>
+      </div>
       <p style={{ opacity: 0.6, marginTop: 0 }}>
         {rows.length} session{rows.length === 1 ? "" : "s"}. Click a row to
         browse screenshots and transcripts.
