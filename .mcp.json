@@ -3,6 +3,10 @@
     "supabase": {
       "type": "http",
       "url": "https://mcp.supabase.com/mcp?features=database%2Cdevelopment%2Cfunctions%2Cstorage"
+    },
+    "gbrain": {
+      "type": "stdio",
+      "command": "./brain/mcp-serve.sh"
     }
   }
 }

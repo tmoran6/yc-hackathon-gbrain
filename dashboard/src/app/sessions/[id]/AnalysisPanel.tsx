@@ -47,18 +47,25 @@ export type AnalyzerResult = {
 
 export type ReviewState = "user_review" | "confirmed" | "discarded";
 
+export type BrainPageInfo = {
+  relPath: string;
+  exists: boolean;
+};
+
 export default function AnalysisPanel({
   result,
   edits,
   reviewState,
   recording,
   updatedAt,
+  brainPage,
 }: {
   result: AnalyzerResult | null;
   edits: AnalysisEdits | null;
   reviewState: ReviewState | null;
   recording: string | null;
   updatedAt: Date | null;
+  brainPage: BrainPageInfo | null;
 }) {
   if (!result) {
     return (
@@ -106,6 +113,18 @@ export default function AnalysisPanel({
           )}
         </div>
       </div>
+
+      {reviewState === "confirmed" && brainPage && brainPage.exists && (
+        <div style={brainBanner}>
+          <span style={brainIcon}>🧠</span>
+          <span>
+            Filed to the brain at{" "}
+            <code style={codeInline}>{brainPage.relPath}</code>. GBrain re-index
+            running in the background; agents can query this workflow once
+            embedding completes.
+          </span>
+        </div>
+      )}
 
       {/* Synthesized workflow */}
       <div style={workflowBox}>
@@ -412,4 +431,22 @@ const qaCard: React.CSSProperties = {
   borderRadius: 6,
   padding: "8px 12px",
   background: "#11151a",
+};
+
+const brainBanner: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  padding: "10px 14px",
+  borderRadius: 8,
+  border: "1px solid #2c6b40",
+  background: "#142a1c",
+  color: "#a4eebd",
+  fontSize: 13,
+  marginBottom: 16,
+};
+
+const brainIcon: React.CSSProperties = {
+  fontSize: 16,
+  lineHeight: 1,
 };

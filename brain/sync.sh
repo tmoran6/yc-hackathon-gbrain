@@ -5,6 +5,25 @@ set -euo pipefail
 
 BRAIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Keep the PGLite brain inside the repo (under brain/.gbrain/) rather than the
+# user's home. gbrain treats GBRAIN_HOME as the parent and creates `.gbrain/`
+# inside it, so we point it at the brain dir itself. Self-contained per-checkout;
+# the `.gbrain/` directory is gitignored.
+export GBRAIN_HOME="${GBRAIN_HOME:-$BRAIN_DIR}"
+
+# gbrain reads $DATABASE_URL / $GBRAIN_DATABASE_URL and switches to Postgres
+# mode when either is set, ignoring the file-config's `engine: pglite`. The
+# dashboard's .env.local exports DATABASE_URL=<supabase>, which leaks into
+# spawned children. Force-clear here so the brain is always the local PGLite.
+unset DATABASE_URL GBRAIN_DATABASE_URL GBRAIN_DIRECT_DATABASE_URL
+
+# Make bun-linked gbrain visible to non-login shells (e.g. spawned by the
+# dashboard's Next.js process).
+case ":$PATH:" in
+  *":$HOME/.bun/bin:"*) ;;
+  *) export PATH="$HOME/.bun/bin:$PATH" ;;
+esac
+
 if ! command -v gbrain >/dev/null 2>&1; then
   echo "gbrain CLI not found on PATH. Install it: https://github.com/garrytan/gbrain" >&2
   exit 1
