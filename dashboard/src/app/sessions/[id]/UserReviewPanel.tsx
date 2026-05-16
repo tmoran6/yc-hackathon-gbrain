@@ -370,11 +370,11 @@ function trimList(items: string[]): string[] {
 }
 
 const card: React.CSSProperties = {
-  border: "1px solid #2a4163",
+  border: "1px solid var(--border-blue-strong)",
   borderRadius: 8,
   padding: "1.25rem 1.5rem",
   marginBottom: "2rem",
-  background: "#0e1622",
+  background: "var(--bg-review-card)",
 };
 
 const sectionHead: React.CSSProperties = {
@@ -404,10 +404,10 @@ const intro: React.CSSProperties = {
 };
 
 const workflowBox: React.CSSProperties = {
-  border: "1px solid #1f242b",
+  border: "1px solid var(--border-default)",
   borderRadius: 8,
   padding: "1rem 1.25rem",
-  background: "#11151a",
+  background: "var(--bg-inner)",
 };
 
 const label: React.CSSProperties = {
@@ -421,9 +421,9 @@ const label: React.CSSProperties = {
 const input: React.CSSProperties = {
   width: "100%",
   boxSizing: "border-box",
-  background: "#0a0d11",
-  color: "#e8e8e8",
-  border: "1px solid #2a3038",
+  background: "var(--bg-input)",
+  color: "var(--text-primary)",
+  border: "1px solid var(--border-input)",
   borderRadius: 6,
   padding: "8px 12px",
   fontSize: 14,
@@ -441,10 +441,10 @@ const rowIdx: React.CSSProperties = {
 };
 
 const qaCard: React.CSSProperties = {
-  border: "1px solid #1f242b",
+  border: "1px solid var(--border-default)",
   borderRadius: 6,
   padding: "10px 12px",
-  background: "#11151a",
+  background: "var(--bg-inner)",
 };
 
 const actions: React.CSSProperties = {
@@ -458,9 +458,9 @@ const errBox: React.CSSProperties = {
   marginTop: 16,
   padding: "8px 12px",
   borderRadius: 6,
-  border: "1px solid #6a2c2c",
-  background: "#1b1212",
-  color: "#ff9c9c",
+  border: "1px solid var(--border-error-box)",
+  background: "var(--bg-error-box)",
+  color: "var(--fg-error-text)",
   fontSize: 13,
 };
 
@@ -468,8 +468,8 @@ const pendingBadge: React.CSSProperties = {
   marginLeft: 10,
   fontSize: 11,
   fontWeight: 500,
-  color: "#ffcc66",
-  background: "#3a2e10",
+  color: "var(--fg-pill-orange-alt)",
+  background: "var(--bg-pill-orange-alt)",
   padding: "2px 8px",
   borderRadius: 999,
   verticalAlign: "middle",
@@ -479,7 +479,7 @@ function btnBase(disabled: boolean): React.CSSProperties {
   return {
     padding: "8px 16px",
     borderRadius: 6,
-    border: "1px solid #2a3038",
+    border: "1px solid var(--border-input)",
     fontSize: 13,
     fontWeight: 500,
     cursor: disabled ? "not-allowed" : "pointer",
@@ -490,26 +490,26 @@ function btnBase(disabled: boolean): React.CSSProperties {
 function btnPrimary(disabled: boolean): React.CSSProperties {
   return {
     ...btnBase(disabled),
-    background: "#1f4d2e",
-    borderColor: "#2c6b40",
-    color: "#a4eebd",
+    background: "var(--bg-button-primary)",
+    borderColor: "var(--border-button-primary)",
+    color: "var(--fg-button-primary)",
   };
 }
 
 function btnSecondary(disabled: boolean): React.CSSProperties {
   return {
     ...btnBase(disabled),
-    background: "#1c2128",
-    color: "#e8e8e8",
+    background: "var(--bg-button-secondary)",
+    color: "var(--text-primary)",
   };
 }
 
 function btnDanger(disabled: boolean): React.CSSProperties {
   return {
     ...btnBase(disabled),
-    background: "#2a1a1a",
-    borderColor: "#5a2929",
-    color: "#ff9c9c",
+    background: "var(--bg-button-danger)",
+    borderColor: "var(--border-button-danger)",
+    color: "var(--fg-button-danger)",
   };
 }
 
@@ -517,9 +517,9 @@ function tinyBtn(disabled: boolean): React.CSSProperties {
   return {
     padding: "4px 8px",
     borderRadius: 4,
-    border: "1px solid #2a3038",
-    background: disabled ? "#161a20" : "#1c2128",
-    color: disabled ? "#555" : "#e8e8e8",
+    border: "1px solid var(--border-input)",
+    background: disabled ? "var(--bg-button-disabled)" : "var(--bg-button-secondary)",
+    color: disabled ? "var(--text-disabled)" : "var(--text-primary)",
     fontSize: 12,
     cursor: disabled ? "not-allowed" : "pointer",
     minWidth: 28,
@@ -531,9 +531,9 @@ const addBtn: React.CSSProperties = {
   marginTop: 4,
   padding: "4px 10px",
   borderRadius: 4,
-  border: "1px dashed #2a3038",
+  border: "1px dashed var(--border-input)",
   background: "transparent",
-  color: "#79b8ff",
+  color: "var(--text-link)",
   fontSize: 12,
   cursor: "pointer",
 };

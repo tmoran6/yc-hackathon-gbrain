@@ -108,7 +108,7 @@ function ScreenshotPanel({ screenshots }: { screenshots: Screenshot[] }) {
   return (
     <section
       style={{
-        border: "1px solid #1f242b",
+        border: "1px solid var(--border-default)",
         borderRadius: 8,
         padding: "1.25rem",
       }}
@@ -140,7 +140,7 @@ function ScreenshotPanel({ screenshots }: { screenshots: Screenshot[] }) {
         <>
           <div
             style={{
-              background: "#000",
+              background: "var(--bg-image)",
               borderRadius: 6,
               overflow: "hidden",
               minHeight: imgHeight || 200,
@@ -228,7 +228,7 @@ function ScreenshotPanel({ screenshots }: { screenshots: Screenshot[] }) {
                 setPlaying(false);
                 setIdx(Number(e.target.value));
               }}
-              style={{ flex: 1, accentColor: "#79b8ff" }}
+              style={{ flex: 1, accentColor: "var(--accent-slider)" }}
             />
           </div>
           <div
@@ -251,7 +251,7 @@ function TranscriptPanel({ transcripts }: { transcripts: Transcript[] }) {
   return (
     <section
       style={{
-        border: "1px solid #1f242b",
+        border: "1px solid var(--border-default)",
         borderRadius: 8,
         padding: "1.25rem",
       }}
@@ -276,10 +276,10 @@ function TranscriptPanel({ transcripts }: { transcripts: Transcript[] }) {
             <div
               key={t.name}
               style={{
-                border: "1px solid #1f242b",
+                border: "1px solid var(--border-default)",
                 borderRadius: 6,
                 padding: "0.85rem 1rem",
-                background: "#0f1216",
+                background: "var(--bg-transcript)",
               }}
             >
               <div
@@ -323,9 +323,9 @@ function buttonStyle(disabled: boolean): React.CSSProperties {
   return {
     padding: "6px 12px",
     borderRadius: 6,
-    border: "1px solid #2a3038",
-    background: disabled ? "#161a20" : "#1c2128",
-    color: disabled ? "#555" : "#e8e8e8",
+    border: "1px solid var(--border-input)",
+    background: disabled ? "var(--bg-button-disabled)" : "var(--bg-button-secondary)",
+    color: disabled ? "var(--text-disabled)" : "var(--text-primary)",
     fontSize: 13,
     cursor: disabled ? "not-allowed" : "pointer",
     minWidth: 40,
@@ -336,9 +336,17 @@ function playButtonStyle(disabled: boolean, playing: boolean): React.CSSProperti
   return {
     padding: "6px 16px",
     borderRadius: 6,
-    border: "1px solid #2c6b40",
-    background: disabled ? "#161a20" : playing ? "#3a2e10" : "#1f4d2e",
-    color: disabled ? "#555" : playing ? "#ffcc66" : "#a4eebd",
+    border: "1px solid var(--border-button-primary)",
+    background: disabled
+      ? "var(--bg-button-disabled)"
+      : playing
+        ? "var(--bg-pill-orange-alt)"
+        : "var(--bg-button-primary)",
+    color: disabled
+      ? "var(--text-disabled)"
+      : playing
+        ? "var(--fg-pill-orange-alt)"
+        : "var(--fg-button-primary)",
     fontSize: 13,
     fontWeight: 500,
     cursor: disabled ? "not-allowed" : "pointer",

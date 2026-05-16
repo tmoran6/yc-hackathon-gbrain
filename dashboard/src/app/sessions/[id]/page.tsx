@@ -82,7 +82,7 @@ export default async function SessionPage({
       <Link
         href="/"
         style={{
-          color: "#79b8ff",
+          color: "var(--text-link)",
           textDecoration: "none",
           fontSize: 14,
         }}
