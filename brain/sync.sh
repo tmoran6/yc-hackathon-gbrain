@@ -15,6 +15,12 @@ if [[ -z "${OPENAI_API_KEY:-}" ]]; then
   exit 1
 fi
 
+# gbrain defaults to search.mode "tokenmax", which can cost ~$1K/mo at heavy
+# use. Pin it to "balanced" (the Sonnet-tier sweet spot) on every sync so the
+# demo laptop never drifts back to the expensive default.
+echo "→ Pinning search mode to balanced"
+gbrain config set search.mode balanced
+
 echo "→ Importing markdown from $BRAIN_DIR"
 gbrain import "$BRAIN_DIR" --no-embed
 
