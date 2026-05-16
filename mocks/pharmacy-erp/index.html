@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>RxMaster Pharmacy Management System v4.2.18 - [LICENSED]</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ============ TITLE BAR ============ -->
+<div id="titlebar">
+  <span class="title-icon">Rx</span>
+  <span class="title-text">RxMaster Pharmacy Management System &nbsp;-&nbsp; v4.2.18 (Build 8821) &nbsp;-&nbsp; [LICENSED TO: COMMUNITY DRUGS #4471]</span>
+  <span class="title-buttons">
+    <span class="title-btn">_</span>
+    <span class="title-btn">▢</span>
+    <span class="title-btn close">✕</span>
+  </span>
+</div>
+
+<!-- ============ MENU BAR ============ -->
+<div id="menubar">
+  <span class="menu-item"><u>F</u>ile</span>
+  <span class="menu-item"><u>E</u>dit</span>
+  <span class="menu-item"><u>P</u>atient</span>
+  <span class="menu-item"><u>R</u>x</span>
+  <span class="menu-item"><u>I</u>nventory</span>
+  <span class="menu-item">I<u>n</u>surance</span>
+  <span class="menu-item">Re<u>p</u>orts</span>
+  <span class="menu-item"><u>T</u>ools</span>
+  <span class="menu-item"><u>W</u>indow</span>
+  <span class="menu-item"><u>H</u>elp</span>
+</div>
+
+<!-- ============ TOOLBAR ============ -->
+<div id="toolbar">
+  <button class="tb-btn" data-nav="dashboard"><span class="tb-ico">⌂</span><br>Home</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" data-nav="patients"><span class="tb-ico">👤</span><br>Patient</button>
+  <button class="tb-btn" data-nav="rx-new"><span class="tb-ico">℞</span><br>New Rx</button>
+  <button class="tb-btn" data-nav="rx-refill"><span class="tb-ico">↻</span><br>Refill</button>
+  <button class="tb-btn" data-nav="rx-queue"><span class="tb-ico">≡</span><br>Queue</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" data-nav="inventory"><span class="tb-ico">▦</span><br>Inventory</button>
+  <button class="tb-btn" data-nav="purchasing"><span class="tb-ico">⛟</span><br>Orders</button>
+  <button class="tb-btn" data-nav="insurance"><span class="tb-ico">⛨</span><br>Claims</button>
+  <button class="tb-btn" data-nav="appointments"><span class="tb-ico">▤</span><br>Sched.</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" data-nav="reports"><span class="tb-ico">📊</span><br>Reports</button>
+  <button class="tb-btn" id="btn-print"><span class="tb-ico">🖶</span><br>Print</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" id="btn-reset"><span class="tb-ico">⟲</span><br>Reset</button>
+  <button class="tb-btn" id="btn-logout"><span class="tb-ico">🔒</span><br>Logout</button>
+</div>
+
+<!-- ============ MAIN LAYOUT ============ -->
+<div id="main">
+  <!-- LEFT SIDEBAR: NAVIGATION TREE -->
+  <div id="sidebar" class="panel-sunken">
+    <div class="sidebar-header">Navigator</div>
+    <div class="sidebar-body" id="nav-tree">
+      <div class="tree-node tree-root open">
+        <span class="tree-toggle">▼</span> 📁 Pharmacy Operations
+      </div>
+      <div class="tree-children">
+        <div class="tree-node" data-nav="dashboard">📊 Dashboard</div>
+        <div class="tree-node tree-folder open">
+          <span class="tree-toggle">▼</span> 📂 Patient Records
+        </div>
+        <div class="tree-children indent-2">
+          <div class="tree-node" data-nav="patients">👤 Patient Search</div>
+          <div class="tree-node" data-nav="patient-new">➕ New Patient</div>
+        </div>
+        <div class="tree-node tree-folder open">
+          <span class="tree-toggle">▼</span> 📂 Prescriptions
+        </div>
+        <div class="tree-children indent-2">
+          <div class="tree-node" data-nav="rx-queue">≡ Refill Queue</div>
+          <div class="tree-node" data-nav="rx-new">℞ New Prescription</div>
+          <div class="tree-node" data-nav="rx-history">⌚ Rx History</div>
+          <div class="tree-node" data-nav="rx-pa">⚠ Prior Auth Queue</div>
+        </div>
+        <div class="tree-node tree-folder open">
+          <span class="tree-toggle">▼</span> 📂 Inventory Control
+        </div>
+        <div class="tree-children indent-2">
+          <div class="tree-node" data-nav="inventory">▦ Stock Levels</div>
+          <div class="tree-node" data-nav="inventory-low">⚠ Low Stock Report</div>
+          <div class="tree-node" data-nav="inventory-expiry">⌛ Expiration Tracking</div>
+        </div>
+        <div class="tree-node tree-folder open">
+          <span class="tree-toggle">▼</span> 📂 Purchasing
+        </div>
+        <div class="tree-children indent-2">
+          <div class="tree-node" data-nav="purchasing">⛟ Purchase Orders</div>
+          <div class="tree-node" data-nav="purchasing-receive">📦 Receive Shipment</div>
+          <div class="tree-node" data-nav="purchasing-suppliers">🏭 Suppliers</div>
+        </div>
+        <div class="tree-node tree-folder open">
+          <span class="tree-toggle">▼</span> 📂 Insurance &amp; Claims
+        </div>
+        <div class="tree-children indent-2">
+          <div class="tree-node" data-nav="insurance">⛨ Claims Queue</div>
+          <div class="tree-node" data-nav="insurance-verify">✓ Verify Eligibility</div>
+          <div class="tree-node" data-nav="insurance-pa">📋 Prior Authorization</div>
+        </div>
+        <div class="tree-node tree-folder open">
+          <span class="tree-toggle">▼</span> 📂 Appointments
+        </div>
+        <div class="tree-children indent-2">
+          <div class="tree-node" data-nav="appointments">▤ Schedule</div>
+          <div class="tree-node" data-nav="appointments-vaccine">💉 Vaccine Booking</div>
+        </div>
+        <div class="tree-node tree-folder open">
+          <span class="tree-toggle">▼</span> 📂 Reports &amp; Compliance
+        </div>
+        <div class="tree-children indent-2">
+          <div class="tree-node" data-nav="reports">📊 Reports Center</div>
+          <div class="tree-node" data-nav="reports-compliance">📋 DEA Compliance</div>
+          <div class="tree-node" data-nav="reports-sales">💲 Daily Sales</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTER: CONTENT AREA -->
+  <div id="content">
+    <!-- TAB STRIP -->
+    <div id="tabstrip">
+      <!-- tabs populated by JS -->
+    </div>
+
+    <!-- ACTIVE PAGE -->
+    <div id="page" class="panel-sunken">
+      <!-- content rendered here -->
+    </div>
+  </div>
+</div>
+
+<!-- ============ STATUS BAR ============ -->
+<div id="statusbar">
+  <span class="sb-cell" id="sb-user">User: <b>jthompson, RPh</b></span>
+  <span class="sb-cell">Pharmacy: COMMUNITY DRUGS #4471</span>
+  <span class="sb-cell">DEA: AB1234567</span>
+  <span class="sb-cell" id="sb-pending">Pending: <b id="sb-pending-count">0</b></span>
+  <span class="sb-cell" id="sb-low">Low Stock: <b id="sb-low-count">0</b></span>
+  <span class="sb-cell sb-flex"></span>
+  <span class="sb-cell">CAPS</span>
+  <span class="sb-cell">NUM</span>
+  <span class="sb-cell" id="sb-clock">--:--:--</span>
+</div>
+
+<!-- ============ MODAL CONTAINER ============ -->
+<div id="modal-backdrop" class="hidden">
+  <div id="modal" class="window-frame">
+    <div class="window-title">
+      <span id="modal-title">Dialog</span>
+      <span class="title-buttons"><span class="title-btn close" id="modal-close">✕</span></span>
+    </div>
+    <div class="window-body" id="modal-body"></div>
+    <div class="window-footer" id="modal-footer"></div>
+  </div>
+</div>
+
+<!-- ============ TOAST ============ -->
+<div id="toast-container"></div>
+
+<script src="seed.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
