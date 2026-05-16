@@ -61,7 +61,7 @@ export default async function Home() {
         <div
           style={{
             marginTop: "1.5rem",
-            border: "1px solid #1f242b",
+            border: "1px solid var(--border-default)",
             borderRadius: 8,
             overflow: "hidden",
           }}
@@ -73,7 +73,7 @@ export default async function Home() {
               fontSize: 14,
             }}
           >
-            <thead style={{ background: "#11151a", textAlign: "left" }}>
+            <thead style={{ background: "var(--bg-inner)", textAlign: "left" }}>
               <tr>
                 <th style={th}>User</th>
                 <th style={th}>Started</th>
@@ -88,13 +88,13 @@ export default async function Home() {
               {rows.map((row) => (
                 <tr
                   key={row.id}
-                  style={{ borderTop: "1px solid #1f242b" }}
+                  style={{ borderTop: "1px solid var(--border-default)" }}
                 >
                   <td style={td}>
                     <Link
                       href={`/sessions/${row.id}`}
                       style={{
-                        color: "#79b8ff",
+                        color: "var(--text-link)",
                         textDecoration: "none",
                         fontWeight: 500,
                       }}
@@ -162,7 +162,7 @@ const th: React.CSSProperties = {
   fontSize: 12,
   textTransform: "uppercase",
   letterSpacing: 0.5,
-  color: "#9aa4ad",
+  color: "var(--text-muted)",
 };
 
 const td: React.CSSProperties = {
@@ -172,11 +172,11 @@ const td: React.CSSProperties = {
 
 function statusPill(status: DisplayStatus): React.CSSProperties {
   const palette: Record<DisplayStatus, { bg: string; fg: string }> = {
-    active: { bg: "#1b3a2b", fg: "#65d195" },
-    "needs review": { bg: "#3a2f17", fg: "#f0b86b" },
-    completed: { bg: "#13233a", fg: "#79b8ff" },
-    discarded: { bg: "#3a1f23", fg: "#e57a86" },
-    ended: { bg: "#23272d", fg: "#9aa4ad" },
+    active: { bg: "var(--bg-pill-green)", fg: "var(--fg-pill-green)" },
+    "needs review": { bg: "var(--bg-pill-orange)", fg: "var(--fg-pill-orange)" },
+    completed: { bg: "var(--bg-pill-blue)", fg: "var(--fg-pill-blue)" },
+    discarded: { bg: "var(--bg-pill-red)", fg: "var(--fg-pill-red)" },
+    ended: { bg: "var(--bg-pill-gray)", fg: "var(--fg-pill-gray)" },
   };
   const { bg, fg } = palette[status];
   return {
@@ -197,9 +197,9 @@ const tagPill: React.CSSProperties = {
   borderRadius: 999,
   fontSize: 11,
   fontWeight: 500,
-  background: "#13233a",
-  color: "#79b8ff",
-  border: "1px solid #2a4163",
+  background: "var(--bg-pill-blue)",
+  color: "var(--fg-pill-blue)",
+  border: "1px solid var(--border-blue-strong)",
   whiteSpace: "nowrap",
 };
 
@@ -210,8 +210,8 @@ const analysisPill: React.CSSProperties = {
   borderRadius: 999,
   fontSize: 12,
   fontWeight: 500,
-  background: "#13233a",
-  color: "#79b8ff",
+  background: "var(--bg-pill-blue)",
+  color: "var(--fg-pill-blue)",
   textDecoration: "none",
   whiteSpace: "nowrap",
   overflow: "hidden",

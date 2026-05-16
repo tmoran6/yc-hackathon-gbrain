@@ -1,0 +1,105 @@
+:root {
+  color-scheme: dark light;
+
+  --bg-page: #0b0d10;
+  --bg-card: #0e1216;
+  --bg-inner: #11151a;
+  --bg-input: #0a0d11;
+  --bg-button-secondary: #1c2128;
+  --bg-button-disabled: #161a20;
+  --bg-code: #1b2028;
+  --bg-transcript: #0f1216;
+  --bg-image: #000000;
+  --bg-review-card: #0e1622;
+
+  --text-primary: #e8e8e8;
+  --text-muted: #9aa4ad;
+  --text-disabled: #555555;
+  --text-link: #79b8ff;
+  --text-secondary-chip: #cdd3da;
+
+  --border-default: #1f242b;
+  --border-input: #2a3038;
+  --border-blue-strong: #2a4163;
+
+  --bg-pill-green: #1b3a2b;
+  --fg-pill-green: #65d195;
+  --bg-pill-blue: #13233a;
+  --fg-pill-blue: #79b8ff;
+  --bg-pill-orange: #3a2f17;
+  --fg-pill-orange: #f0b86b;
+  --bg-pill-orange-alt: #3a2e10;
+  --fg-pill-orange-alt: #ffcc66;
+  --bg-pill-gray: #23272d;
+  --fg-pill-gray: #9aa4ad;
+  --bg-pill-red: #3a1f23;
+  --fg-pill-red: #e57a86;
+
+  --bg-button-primary: #1f4d2e;
+  --border-button-primary: #2c6b40;
+  --fg-button-primary: #a4eebd;
+  --border-button-primary-chip: #2f6747;
+
+  --bg-button-danger: #2a1a1a;
+  --border-button-danger: #5a2929;
+  --fg-button-danger: #ff9c9c;
+
+  --bg-error-box: #1b1212;
+  --border-error-box: #6a2c2c;
+  --fg-error-text: #ff9c9c;
+
+  --accent-slider: #79b8ff;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg-page: #f7f8fa;
+    --bg-card: #ffffff;
+    --bg-inner: #f1f3f5;
+    --bg-input: #ffffff;
+    --bg-button-secondary: #f1f3f5;
+    --bg-button-disabled: #e9ecef;
+    --bg-code: #eef0f3;
+    --bg-transcript: #f8f9fa;
+    --bg-image: #1f242b;
+    --bg-review-card: #f4f8ff;
+
+    --text-primary: #1f242b;
+    --text-muted: #5a6470;
+    --text-disabled: #adb5bd;
+    --text-link: #2563eb;
+    --text-secondary-chip: #495057;
+
+    --border-default: #e0e4e8;
+    --border-input: #ced4da;
+    --border-blue-strong: #93c5fd;
+
+    --bg-pill-green: #d1fae5;
+    --fg-pill-green: #047857;
+    --bg-pill-blue: #dbeafe;
+    --fg-pill-blue: #1d4ed8;
+    --bg-pill-orange: #fef3c7;
+    --fg-pill-orange: #b45309;
+    --bg-pill-orange-alt: #fef3c7;
+    --fg-pill-orange-alt: #b45309;
+    --bg-pill-gray: #e9ecef;
+    --fg-pill-gray: #6c757d;
+    --bg-pill-red: #fee2e2;
+    --fg-pill-red: #b91c1c;
+
+    --bg-button-primary: #059669;
+    --border-button-primary: #047857;
+    --fg-button-primary: #ffffff;
+    --border-button-primary-chip: #059669;
+
+    --bg-button-danger: #fef2f2;
+    --border-button-danger: #fca5a5;
+    --fg-button-danger: #b91c1c;
+
+    --bg-error-box: #fef2f2;
+    --border-error-box: #fca5a5;
+    --fg-error-text: #b91c1c;
+
+    --accent-slider: #2563eb;
+  }
+}

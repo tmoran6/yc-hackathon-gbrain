@@ -188,11 +188,11 @@ export default function TagsEditor({
 }
 
 const card: React.CSSProperties = {
-  border: "1px solid #1f242b",
+  border: "1px solid var(--border-default)",
   borderRadius: 8,
   padding: "1.25rem 1.5rem",
   marginBottom: "2rem",
-  background: "#0e1216",
+  background: "var(--bg-card)",
 };
 
 const headRow: React.CSSProperties = {
@@ -238,9 +238,9 @@ const activeChip: React.CSSProperties = {
   borderRadius: 999,
   fontSize: 12,
   fontWeight: 500,
-  background: "#13233a",
-  color: "#79b8ff",
-  border: "1px solid #2a4163",
+  background: "var(--bg-pill-blue)",
+  color: "var(--fg-pill-blue)",
+  border: "1px solid var(--border-blue-strong)",
 };
 
 const chipRemove: React.CSSProperties = {
@@ -267,9 +267,11 @@ function pickChip(disabled: boolean, accent: boolean): React.CSSProperties {
     fontSize: 12,
     fontWeight: 500,
     cursor: disabled ? "not-allowed" : "pointer",
-    background: accent ? "#1b3a2b" : "#1c2128",
-    color: accent ? "#65d195" : "#cdd3da",
-    border: accent ? "1px solid #2f6747" : "1px dashed #2a3038",
+    background: accent ? "var(--bg-pill-green)" : "var(--bg-button-secondary)",
+    color: accent ? "var(--fg-pill-green)" : "var(--text-secondary-chip)",
+    border: accent
+      ? "1px solid var(--border-button-primary-chip)"
+      : "1px dashed var(--border-input)",
     opacity: disabled ? 0.6 : 1,
   };
 }
@@ -277,9 +279,9 @@ function pickChip(disabled: boolean, accent: boolean): React.CSSProperties {
 const input: React.CSSProperties = {
   flex: 1,
   boxSizing: "border-box",
-  background: "#0a0d11",
-  color: "#e8e8e8",
-  border: "1px solid #2a3038",
+  background: "var(--bg-input)",
+  color: "var(--text-primary)",
+  border: "1px solid var(--border-input)",
   borderRadius: 6,
   padding: "6px 10px",
   fontSize: 13,
@@ -290,9 +292,9 @@ function addBtn(disabled: boolean): React.CSSProperties {
   return {
     padding: "6px 14px",
     borderRadius: 6,
-    border: "1px solid #2a3038",
-    background: disabled ? "#161a20" : "#1f4d2e",
-    color: disabled ? "#555" : "#a4eebd",
+    border: "1px solid var(--border-input)",
+    background: disabled ? "var(--bg-button-disabled)" : "var(--bg-button-primary)",
+    color: disabled ? "var(--text-disabled)" : "var(--fg-button-primary)",
     fontSize: 13,
     fontWeight: 500,
     cursor: disabled ? "not-allowed" : "pointer",
@@ -303,8 +305,8 @@ const errBox: React.CSSProperties = {
   marginTop: 12,
   padding: "8px 12px",
   borderRadius: 6,
-  border: "1px solid #6a2c2c",
-  background: "#1b1212",
-  color: "#ff9c9c",
+  border: "1px solid var(--border-error-box)",
+  background: "var(--bg-error-box)",
+  color: "var(--fg-error-text)",
   fontSize: 13,
 };

@@ -281,11 +281,11 @@ function fmtSec(n: number): string {
 }
 
 const card: React.CSSProperties = {
-  border: "1px solid #1f242b",
+  border: "1px solid var(--border-default)",
   borderRadius: 8,
   padding: "1.25rem 1.5rem",
   marginBottom: "2rem",
-  background: "#0e1216",
+  background: "var(--bg-card)",
 };
 
 const sectionHead: React.CSSProperties = {
@@ -307,19 +307,19 @@ const metaRow: React.CSSProperties = {
 
 const meta: React.CSSProperties = { fontSize: 12, opacity: 0.5 };
 
-const dim: React.CSSProperties = { color: "#9aa4ad" };
+const dim: React.CSSProperties = { color: "var(--text-muted)" };
 
 const workflowBox: React.CSSProperties = {
-  border: "1px solid #1f242b",
+  border: "1px solid var(--border-default)",
   borderRadius: 8,
   padding: "1rem 1.25rem",
-  background: "#11151a",
+  background: "var(--bg-inner)",
 };
 
 const workflowTitle: React.CSSProperties = {
   margin: "0 0 8px",
   fontSize: 16,
-  color: "#79b8ff",
+  color: "var(--text-link)",
 };
 
 const label: React.CSSProperties = {
@@ -346,10 +346,10 @@ const subList: React.CSSProperties = {
 };
 
 const stepCard: React.CSSProperties = {
-  border: "1px solid #1f242b",
+  border: "1px solid var(--border-default)",
   borderRadius: 6,
   padding: "10px 12px",
-  background: "#11151a",
+  background: "var(--bg-inner)",
 };
 
 const stepHead: React.CSSProperties = {
@@ -362,8 +362,8 @@ const stepHead: React.CSSProperties = {
 const timeBadge: React.CSSProperties = {
   fontFamily: "ui-monospace, monospace",
   fontSize: 12,
-  color: "#9aa4ad",
-  background: "#1b2028",
+  color: "var(--text-muted)",
+  background: "var(--bg-code)",
   padding: "2px 6px",
   borderRadius: 4,
 };
@@ -372,14 +372,14 @@ const appBadge: React.CSSProperties = {
   display: "inline-block",
   fontSize: 12,
   fontWeight: 500,
-  color: "#65d195",
-  background: "#1b3a2b",
+  color: "var(--fg-pill-green)",
+  background: "var(--bg-pill-green)",
   padding: "2px 8px",
   borderRadius: 999,
 };
 
 const codeInline: React.CSSProperties = {
-  background: "#1b2028",
+  background: "var(--bg-code)",
   padding: "1px 5px",
   borderRadius: 4,
   fontSize: 12,
@@ -389,8 +389,8 @@ const confirmedBadge: React.CSSProperties = {
   marginLeft: 10,
   fontSize: 11,
   fontWeight: 500,
-  color: "#65d195",
-  background: "#1b3a2b",
+  color: "var(--fg-pill-green)",
+  background: "var(--bg-pill-green)",
   padding: "2px 8px",
   borderRadius: 999,
   verticalAlign: "middle",
@@ -400,16 +400,16 @@ const discardedBadge: React.CSSProperties = {
   marginLeft: 10,
   fontSize: 11,
   fontWeight: 500,
-  color: "#9aa4ad",
-  background: "#23272d",
+  color: "var(--fg-pill-gray)",
+  background: "var(--bg-pill-gray)",
   padding: "2px 8px",
   borderRadius: 999,
   verticalAlign: "middle",
 };
 
 const qaCard: React.CSSProperties = {
-  border: "1px solid #1f242b",
+  border: "1px solid var(--border-default)",
   borderRadius: 6,
   padding: "8px 12px",
-  background: "#11151a",
+  background: "var(--bg-inner)",
 };
