@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Screenshot = { name: string; url: string };
 type Transcript = { name: string; text: string };
@@ -23,6 +23,13 @@ export default function SessionViewer({
 function ScreenshotPanel({ screenshots }: { screenshots: Screenshot[] }) {
   const [idx, setIdx] = useState(0);
   const total = screenshots.length;
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [imgHeight, setImgHeight] = useState(0);
+
+  function captureHeight() {
+    const h = imgRef.current?.getBoundingClientRect().height ?? 0;
+    if (h > 0) setImgHeight(h);
+  }
 
   useEffect(() => {
     if (idx > total - 1) setIdx(Math.max(0, total - 1));
@@ -76,7 +83,7 @@ function ScreenshotPanel({ screenshots }: { screenshots: Screenshot[] }) {
               background: "#000",
               borderRadius: 6,
               overflow: "hidden",
-              minHeight: 200,
+              minHeight: imgHeight || 200,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -84,9 +91,10 @@ function ScreenshotPanel({ screenshots }: { screenshots: Screenshot[] }) {
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              key={screenshots[idx].url}
+              ref={imgRef}
               src={screenshots[idx].url}
               alt={screenshots[idx].name}
+              onLoad={captureHeight}
               style={{
                 maxWidth: "100%",
                 maxHeight: "70vh",
