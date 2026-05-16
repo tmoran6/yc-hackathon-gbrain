@@ -10,7 +10,7 @@
  * Run with:  node --experimental-strip-types analyze.ts [options]
  */
 
-import { readdirSync, readFileSync, writeFileSync, statSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync, statSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join, basename } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
@@ -77,6 +77,7 @@ interface Options {
   jpegQuality: number;
   dryRun: boolean;
   dashboardURL: string;
+  force: boolean;
 }
 
 // ---------- config / args ----------
@@ -123,6 +124,7 @@ function parseArgs(): Options {
     maxDim: Number(get("--max-dim") || 1280),
     jpegQuality: Number(get("--jpeg-quality") || 65),
     dryRun: has("--dry-run"),
+    force: has("--force"),
     dashboardURL: (
       get("--dashboard-url") ||
       process.env.DASHBOARD_URL ||
@@ -484,6 +486,7 @@ async function analyzeSession(opts: Options, sessionDir: string) {
 
   const sessionOut = join(sessionDir, "analysis.json");
   const repoOut = join(import.meta.dirname, "out", `${name}.analysis.json`);
+  mkdirSync(join(import.meta.dirname, "out"), { recursive: true });
   writeFileSync(sessionOut, JSON.stringify(output, null, 2));
   writeFileSync(repoOut, JSON.stringify(output, null, 2));
 
@@ -689,13 +692,44 @@ async function main() {
     return;
   }
 
-  const sessionDir = opts.session || latestSession();
-  if (!sessionDir) {
-    console.error(`✗ No session found. Record something with the Swift app, or pass --session <dir>.`);
+  if (opts.session) {
+    await analyzeSession(opts, opts.session);
+    return;
+  }
+
+  const sessions = listSessions();
+  if (!sessions.length) {
+    console.error(`✗ No sessions found. Record something with the Swift app, or pass --session <dir>.`);
     console.error(`  Looked in: ${RECORDINGS_DIR}`);
     process.exit(1);
   }
-  await analyzeSession(opts, sessionDir);
+
+  const pending = opts.force
+    ? sessions
+    : sessions.filter((d) => !existsSync(join(d, "analysis.json")));
+  const skipped = sessions.length - pending.length;
+
+  console.log(`Found ${sessions.length} session(s)${skipped ? ` — skipping ${skipped} already analyzed (use --force to re-run)` : ""}.`);
+  if (!pending.length) {
+    console.log(`Nothing to do.`);
+    return;
+  }
+
+  let failed = 0;
+  for (let i = 0; i < pending.length; i++) {
+    const dir = pending[i];
+    console.log(`\n[${i + 1}/${pending.length}] ${basename(dir)}`);
+    try {
+      await analyzeSession(opts, dir);
+    } catch (e) {
+      failed++;
+      console.error(`✗ Failed on ${basename(dir)}: ${(e as Error).message}`);
+    }
+  }
+  if (failed) {
+    console.error(`\n${failed} session(s) failed.`);
+    process.exit(1);
+  }
 }
 
 main().catch((e) => {

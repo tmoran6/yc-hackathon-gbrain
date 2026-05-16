@@ -1,0 +1,8 @@
+{
+  "name": "pharmacy-erp-mock",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npx serve . -l 5002"
+  }
+}
