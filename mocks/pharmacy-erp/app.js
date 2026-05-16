@@ -277,6 +277,14 @@ routes.dashboard = {
     root.innerHTML = `
       ${pageHeader('Daily Operations Dashboard', 'Home › Dashboard')}
 
+      <div class="demo-scenario-strip">
+        <span class="demo-label">QUICK DEMO:</span>
+        <button class="btn-primary" onclick="router.go('refill-workflow')">↻ Open Refill Workflow</button>
+        <button onclick="window._dashDemoRejected()" style="background:#800000;color:#fff;border-color:#c00;" id="btn-demo-rejected">⚠ Demo: Insurance REJECTED</button>
+        <button onclick="router.go('rx-queue')">≡ Refill Queue (${pending} pending)</button>
+        <button onclick="router.go('insurance')">⛨ Claims Queue (${rejectedClaims} rejected)</button>
+      </div>
+
       <div class="kpi-grid">
         <div class="kpi-card ${pending > 5 ? 'warn' : ''}">
           <div class="kpi-label">PENDING REFILLS</div>
@@ -385,6 +393,14 @@ routes.dashboard = {
       </div>
     `;
   }
+};
+
+window._dashDemoRejected = function() {
+  router.go('refill-workflow');
+  // After routing, trigger the rejected preset (slight delay for render)
+  setTimeout(() => {
+    if (window._wfDemo) window._wfDemo.presetRejected();
+  }, 150);
 };
 
 // ----------------------------------------------------------------
@@ -851,10 +867,843 @@ routes['rx-refill'] = {
       ${pageHeader('Refill Prescription', 'Home › Prescriptions › Refill')}
       <div class="notice">Select a patient to begin a manual refill, or process from the Refill Queue.</div>
       <div class="toolbar-strip">
-        <button class="btn-primary" onclick="router.go('patients')">👤 Look Up Patient</button>
+        <button class="btn-primary" onclick="router.go('refill-workflow')">↻ Refill Workflow</button>
+        <button onclick="router.go('patients')">👤 Look Up Patient</button>
         <button onclick="router.go('rx-queue')">≡ Open Refill Queue</button>
       </div>
     `;
+  }
+};
+
+// ----------------------------------------------------------------
+// REFILL WORKFLOW — Full-page, demoable, 6-step wizard
+// ----------------------------------------------------------------
+routes['refill-workflow'] = {
+  title: () => 'Refill Workflow',
+  key: () => 'refill-workflow',
+  render(root, params) {
+    // State lives on root element so it survives re-renders within the same tab
+    if (!root.__wf) {
+      root.__wf = {
+        step: 1,           // 1-6
+        patientId: null,
+        rxId: null,
+        queueId: null,
+        insResult: null,   // 'APPROVED' | 'REJECTED'
+        copay: 0,
+        claimId: null,
+        paId: null,
+        fillComplete: false,
+        notifSent: false,
+        // forced demo scenario: null | 'ins-rejected'
+        demoScenario: params && params.demoScenario || null,
+      };
+    }
+    const wf = root.__wf;
+
+    // ---- Step labels ----
+    const STEPS = [
+      { n: 1, label: 'Patient Search', sub: 'Locate patient record' },
+      { n: 2, label: 'Rx & Eligibility', sub: 'Prescription + refill check' },
+      { n: 3, label: 'Insurance Verification', sub: 'Adjudicate claim' },
+      { n: 4, label: 'Inventory Check', sub: 'Confirm stock on hand' },
+      { n: 5, label: 'Mark for Fulfillment', sub: 'Fill or order' },
+      { n: 6, label: 'Notify Patient', sub: 'Pickup-ready alert' },
+    ];
+
+    function stepClass(n) {
+      if (n < wf.step) return 'wf-step-done';
+      if (n === wf.step) return 'wf-step-active';
+      return '';
+    }
+
+    function stepNumSymbol(n) {
+      if (n < wf.step) return '✓';
+      return n;
+    }
+
+    function stepsHtml() {
+      return STEPS.map(s => `
+        <div class="wf-step-item ${stepClass(s.n)}">
+          <div class="wf-step-num">${stepNumSymbol(s.n)}</div>
+          <div>
+            <div class="wf-step-label">${s.label}</div>
+            <div class="wf-step-sub">${s.sub}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function rerender() {
+      root.innerHTML = '';
+      routes['refill-workflow'].render(root, params);
+    }
+
+    // ---- Helpers ----
+    function getWfPatient() { return wf.patientId ? getPatient(wf.patientId) : null; }
+    function getWfRx() { return wf.rxId ? getRx(wf.rxId) : null; }
+    function getWfMed() { const r = getWfRx(); return r ? getMed(r.medId) : null; }
+
+    // ---- Build outer shell ----
+    const scenarioBar = `
+      <div class="demo-scenario-strip">
+        <span class="demo-label">DEMO PRESETS:</span>
+        <button onclick="window._wfDemo.presetNormal()">▶ Normal Refill (Anderson/Lisinopril)</button>
+        <button onclick="window._wfDemo.presetRejected()" style="background:#800000;color:#fff;border-color:#c00;">▶ Insurance REJECTED (Garcia/Advair)</button>
+        <button onclick="window._wfDemo.presetEarlyRefill()">▶ Refill Too Early (Espinoza/Sertraline)</button>
+        <span class="sb-flex"></span>
+        <button onclick="window._wfDemo.reset()">⟲ Reset Workflow</button>
+      </div>`;
+
+    root.innerHTML = `
+      ${pageHeader('Medication Refill Workflow', 'Home › Prescriptions › Refill Workflow')}
+      ${scenarioBar}
+      <div class="wf-layout">
+        <div class="wf-steps-panel">
+          <div class="wf-steps-header">Refill Steps</div>
+          <div id="wf-steps-list">${stepsHtml()}</div>
+          <div style="flex:1;"></div>
+          ${wf.patientId ? `
+          <div style="padding:6px;background:#e8e8e8;border-top:1px solid #808080;font-size:10px;">
+            <div class="bold">${esc(patientName(getWfPatient()))}</div>
+            <div class="mono">${esc(getWfPatient().id)}</div>
+            ${wf.rxId ? `<div class="mono small">${esc(wf.rxId)}</div>` : ''}
+            <div style="color:#c00000;font-weight:bold;">${esc(getWfPatient().allergies)}</div>
+          </div>` : ''}
+        </div>
+        <div class="wf-content-panel" id="wf-content">
+          ${renderStep(wf.step)}
+        </div>
+      </div>
+    `;
+
+    // ---- Attach demo preset helpers ----
+    window._wfDemo = {
+      presetNormal() {
+        root.__wf = { step: 1, patientId: 'P001', rxId: 'RX-2026-100001', queueId: null, insResult: null, copay: 0, claimId: null, paId: null, fillComplete: false, notifSent: false, demoScenario: null };
+        rerender();
+        // auto-advance to step 2
+        setTimeout(() => { root.__wf.step = 2; rerender(); }, 300);
+      },
+      presetRejected() {
+        root.__wf = { step: 1, patientId: 'P007', rxId: 'RX-2026-100009', queueId: null, insResult: null, copay: 0, claimId: null, paId: null, fillComplete: false, notifSent: false, demoScenario: 'ins-rejected' };
+        rerender();
+        setTimeout(() => { root.__wf.step = 2; rerender(); }, 300);
+      },
+      presetEarlyRefill() {
+        root.__wf = { step: 1, patientId: 'P005', rxId: 'RX-2026-100007', queueId: null, insResult: null, copay: 0, claimId: null, paId: null, fillComplete: false, notifSent: false, demoScenario: 'too-early' };
+        rerender();
+        setTimeout(() => { root.__wf.step = 2; rerender(); }, 300);
+      },
+      reset() {
+        root.__wf = null;
+        rerender();
+      },
+    };
+
+    // ---- Step renderers ----
+    function renderStep(n) {
+      switch (n) {
+        case 1: return renderStep1();
+        case 2: return renderStep2();
+        case 3: return renderStep3();
+        case 4: return renderStep4();
+        case 5: return renderStep5();
+        case 6: return renderStep6();
+        default: return '<div class="notice">Unknown step.</div>';
+      }
+    }
+
+    // STEP 1 — Patient Search
+    function renderStep1() {
+      const patients = state.patients;
+      return `
+        <div class="groupbox">
+          <span class="gb-title">Step 1 — Patient Search</span>
+          <div class="toolbar-strip">
+            <span>Search by:</span>
+            <label><input type="radio" name="s1mode" value="name" checked> Last Name</label>
+            <label><input type="radio" name="s1mode" value="dob"> DOB</label>
+            <label><input type="radio" name="s1mode" value="id"> Patient ID</label>
+            <input id="s1-term" type="text" placeholder="Enter search term..." style="width:220px;">
+            <button id="s1-search" class="btn-primary">🔍 Search</button>
+            <button id="s1-clear">Clear</button>
+          </div>
+          <div class="table-wrap" style="max-height:300px;">
+          <table class="data-table" id="s1-table">
+            <thead><tr>
+              <th>Patient ID</th><th>Last Name</th><th>First Name</th><th>DOB / Age</th>
+              <th>Phone</th><th>Insurance Plan</th><th>Allergies</th><th>Action</th>
+            </tr></thead>
+            <tbody id="s1-tbody">
+              ${renderS1Rows(patients)}
+            </tbody>
+          </table>
+          </div>
+          <div class="spacer"></div>
+          <div class="muted small">Double-click a row or click Select to load the patient and proceed to Step 2.</div>
+        </div>
+      `;
+    }
+
+    function renderS1Rows(rows) {
+      return rows.map(p => `<tr data-pid="${p.id}" class="${wf.patientId === p.id ? 'selected' : ''}">
+        <td class="mono">${esc(p.id)}</td>
+        <td><b>${esc(p.last)}</b></td>
+        <td>${esc(p.first)}</td>
+        <td class="mono">${fmtDate(p.dob)} (${age(p.dob)} yrs)</td>
+        <td class="mono">${esc(p.phone)}</td>
+        <td>${esc(p.insurancePlan)}</td>
+        <td style="${p.allergies && p.allergies !== 'NKDA' ? 'color:#c00000;font-weight:bold;' : ''}">${esc(p.allergies)}</td>
+        <td><button onclick="window._wfStep1Select('${p.id}')">Select ›</button></td>
+      </tr>`).join('') || '<tr><td colspan="8" class="center muted">No patients found.</td></tr>';
+    }
+
+    // Wire up step 1 interactions after render
+    setTimeout(() => {
+      const tbody = document.getElementById('s1-tbody');
+      const searchBtn = document.getElementById('s1-search');
+      const clearBtn = document.getElementById('s1-clear');
+      const termIn = document.getElementById('s1-term');
+      if (!searchBtn) return;
+
+      window._wfStep1Select = (pid) => {
+        wf.patientId = pid;
+        wf.rxId = null;
+        wf.step = 2;
+        log('REFILL_WF_PATIENT', `Selected patient ${pid}`);
+        rerender();
+      };
+
+      function doSearch() {
+        const term = (termIn.value || '').trim().toLowerCase();
+        const mode = document.querySelector('input[name="s1mode"]:checked').value;
+        if (!term) { tbody.innerHTML = renderS1Rows(state.patients); return; }
+        const f = state.patients.filter(p => {
+          if (mode === 'name') return p.last.toLowerCase().startsWith(term) || p.first.toLowerCase().startsWith(term);
+          if (mode === 'dob') return (p.dob || '').includes(term);
+          if (mode === 'id') return (p.id || '').toLowerCase().includes(term);
+          return false;
+        });
+        tbody.innerHTML = renderS1Rows(f);
+      }
+
+      searchBtn.onclick = doSearch;
+      clearBtn.onclick = () => { termIn.value = ''; tbody.innerHTML = renderS1Rows(state.patients); };
+      termIn.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+
+      // Double-click
+      tbody.addEventListener('dblclick', e => {
+        const tr = e.target.closest('tr[data-pid]');
+        if (tr) window._wfStep1Select(tr.dataset.pid);
+      });
+    }, 0);
+
+    // STEP 2 — Rx & Eligibility
+    function renderStep2() {
+      const p = getWfPatient();
+      if (!p) return '<div class="notice err">No patient selected. Go back to Step 1.</div>';
+
+      const rxs = state.prescriptions.filter(r => r.patientId === p.id && r.status === 'ACTIVE');
+      const selectedRx = getWfRx();
+      const tooEarly = wf.demoScenario === 'too-early';
+
+      let eligHtml = '';
+      if (selectedRx) {
+        const daysSinceFill = Math.round((new Date('2026-05-16') - new Date(selectedRx.lastFilled)) / 86400000);
+        const minDays = selectedRx.daysSupply - 7;
+        const isEarlyFill = tooEarly || daysSinceFill < minDays;
+        const noRefills = selectedRx.refillsRemaining <= 0;
+
+        let eligStatus, eligClass;
+        if (noRefills) {
+          eligStatus = 'NO REFILLS REMAINING — Prescriber must authorize renewal';
+          eligClass = 'spl-bad';
+        } else if (isEarlyFill) {
+          const earliest = new Date(selectedRx.lastFilled);
+          earliest.setDate(earliest.getDate() + minDays);
+          eligStatus = `REFILL TOO EARLY — Eligible on ${fmtDate(earliest)}`;
+          eligClass = 'spl-warn';
+        } else {
+          eligStatus = `ELIGIBLE — ${selectedRx.refillsRemaining} refill(s) remaining`;
+          eligClass = 'spl-ok';
+        }
+
+        const canContinue = !noRefills && !isEarlyFill;
+        eligHtml = `
+          <div class="groupbox">
+            <span class="gb-title">Refill Eligibility</span>
+            <div style="margin:6px 0;"><span class="status-pill ${eligClass}">${eligStatus}</span></div>
+            <div class="form-grid" style="margin-top:8px;">
+              <label>Rx Number:</label><input readonly value="${esc(selectedRx.id)}">
+              <label>Drug:</label><input readonly value="${esc(getMed(selectedRx.medId) ? getMed(selectedRx.medId).name : '')}">
+              <label>Qty / Days Supply:</label><input readonly value="${selectedRx.qty} tablets / ${selectedRx.daysSupply} days">
+              <label>Refills Remaining:</label><input readonly value="${selectedRx.refillsRemaining} of ${selectedRx.refillsAuth}" style="${selectedRx.refillsRemaining === 0 ? 'background:#ffe4e4;' : 'background:#e4ffe4;'}">
+              <label>Last Filled:</label><input readonly value="${fmtDate(selectedRx.lastFilled)} (${daysSinceFill} days ago)">
+              <label>Min Days Window:</label><input readonly value="${minDays} days">
+              <label>Written:</label><input readonly value="${fmtDate(selectedRx.writtenDate)}">
+              <label>Prescriber:</label><input readonly value="${esc(getPrescriber(selectedRx.prescriberId) ? getPrescriber(selectedRx.prescriberId).name : '')}">
+              <label>SIG:</label><input readonly value="${esc(selectedRx.sig)}" class="span-3">
+            </div>
+            <div class="spacer"></div>
+            <div style="display:flex;gap:6px;justify-content:flex-end;">
+              <button onclick="window._wfStep2Back()">← Back to Patient</button>
+              ${canContinue
+                ? `<button class="btn-primary" onclick="window._wfStep2Continue()">▶ Continue to Insurance ›</button>`
+                : (noRefills
+                    ? `<button onclick="window._wfContactPrescriber('${selectedRx.id}')">📞 Contact Prescriber for Renewal</button>`
+                    : `<button onclick="window._wfNoteEarlyRefill('${selectedRx.id}')">📝 Note Request — Cannot Fill Yet</button>`
+                  )
+              }
+            </div>
+          </div>`;
+      }
+
+      return `
+        <div class="groupbox">
+          <span class="gb-title">Patient — ${esc(patientName(p))}</span>
+          <div class="wf-patient-card">
+            <div><span class="wf-pc-label">Patient ID:</span> <span class="wf-pc-value mono">${esc(p.id)}</span></div>
+            <div><span class="wf-pc-label">DOB / Age:</span> <span class="wf-pc-value">${fmtDate(p.dob)} · ${age(p.dob)} yrs · ${esc(p.sex)}</span></div>
+            <div><span class="wf-pc-label">Phone:</span> <span class="wf-pc-value">${esc(p.phone)}</span></div>
+            <div><span class="wf-pc-label">Insurance:</span> <span class="wf-pc-value">${esc(p.insurancePlan)}</span></div>
+            <div><span class="wf-pc-label">Member ID:</span> <span class="wf-pc-value mono">${esc(p.insuranceId)}</span></div>
+            <div><span class="wf-pc-label">Copay Tier:</span> <span class="wf-pc-value">${esc(p.copay)}</span></div>
+            <div style="grid-column:span 2;"><span class="wf-pc-label">Allergies:</span> <span class="wf-pc-allergy">${esc(p.allergies)}</span></div>
+          </div>
+        </div>
+
+        <div class="groupbox">
+          <span class="gb-title">Select Prescription to Refill</span>
+          <div id="s2-rx-list">
+          ${rxs.map(r => {
+            const m = getMed(r.medId);
+            const d = getPrescriber(r.prescriberId);
+            const isSelected = wf.rxId === r.id;
+            return `<div class="rx-select-row ${isSelected ? 'rx-selected' : ''}" onclick="window._wfStep2SelectRx('${r.id}')">
+              <div>
+                <div class="rx-sr-name">${esc(m ? m.name : '')} ${m && m.paRequired ? '<span class="badge badge-warn">PA REQ</span>' : ''} ${m && m.controlled ? '<span class="badge badge-bad">' + esc(m.schedule) + '</span>' : ''}</div>
+                <div class="rx-sr-meta">Rx ${esc(r.id)} · Written ${fmtDate(r.writtenDate)} · ${r.refillsRemaining}/${r.refillsAuth} refills · Last filled ${fmtDate(r.lastFilled)}</div>
+                <div class="rx-sr-meta">${esc(r.sig)}</div>
+              </div>
+              <div style="text-align:right;flex-shrink:0;">
+                <div class="bold">${r.qty} × ${esc(m ? m.form : '')}</div>
+                <div class="rx-sr-meta">${r.daysSupply} days supply</div>
+                <div class="rx-sr-meta">${esc(d ? d.name : '')}</div>
+              </div>
+            </div>`;
+          }).join('') || '<div class="notice">No active prescriptions for this patient.</div>'}
+          </div>
+        </div>
+
+        ${eligHtml}
+      `;
+    }
+
+    setTimeout(() => {
+      window._wfStep2SelectRx = (rxId) => {
+        wf.rxId = rxId;
+        rerender();
+      };
+      window._wfStep2Continue = () => {
+        wf.step = 3;
+        rerender();
+      };
+      window._wfStep2Back = () => {
+        wf.step = 1;
+        wf.patientId = null;
+        wf.rxId = null;
+        rerender();
+      };
+      window._wfContactPrescriber = (rxId) => {
+        const rx = getRx(rxId);
+        const d = getPrescriber(rx.prescriberId);
+        alertDialog('Contact Prescriber', `<b>No refills remaining</b> on Rx ${rxId}.<br><br>Contact: <b>${d ? esc(d.name) : 'Prescriber'}</b><br>Phone: ${d ? esc(d.phone) : 'N/A'}<br><br>Request renewal authorization before proceeding.`);
+        log('REFILL_WF_NO_REFILLS', `Rx ${rxId} — prescriber contact initiated`);
+      };
+      window._wfNoteEarlyRefill = (rxId) => {
+        const rx = getRx(rxId);
+        const minDays = rx.daysSupply - 7;
+        const earliest = new Date(rx.lastFilled);
+        earliest.setDate(earliest.getDate() + minDays);
+        alertDialog('Refill Too Early', `<b>Refill cannot be processed yet.</b><br><br>Insurance will not cover until: <b>${fmtDate(earliest)}</b><br><br>The request has been noted. Patient will be contacted when eligible.`);
+        log('REFILL_WF_TOO_EARLY', `Rx ${rxId} — earliest eligible ${fmtDate(earliest)}`);
+      };
+    }, 0);
+
+    // STEP 3 — Insurance Verification
+    function renderStep3() {
+      const p = getWfPatient();
+      const rx = getWfRx();
+      const m = getWfMed();
+      if (!p || !rx || !m) return '<div class="notice err">Missing patient or prescription data.</div>';
+
+      const isRejected = wf.demoScenario === 'ins-rejected' || m.paRequired;
+      const d = getPrescriber(rx.prescriberId);
+
+      if (wf.insResult === null) {
+        // Show the "verify" form before submitting
+        return `
+          <div class="groupbox">
+            <span class="gb-title">Step 3 — Insurance Adjudication</span>
+            <div class="ins-check-box">
+              <div class="ins-row"><span class="ins-key">Plan:</span><span class="ins-val">${esc(p.insurancePlan)}</span></div>
+              <div class="ins-row"><span class="ins-key">Member ID:</span><span class="ins-val mono">${esc(p.insuranceId)}</span></div>
+              <div class="ins-row"><span class="ins-key">BIN / PCN / Group:</span><span class="ins-val mono">${esc(p.insuranceBin)} / ${esc(p.insurancePcn)} / ${esc(p.insuranceGroup)}</span></div>
+              <div class="ins-row"><span class="ins-key">Drug (NDC):</span><span class="ins-val mono">${esc(m.ndc)}</span></div>
+              <div class="ins-row"><span class="ins-key">Drug Name:</span><span class="ins-val">${esc(m.name)}</span></div>
+              <div class="ins-row"><span class="ins-key">Qty / Days Supply:</span><span class="ins-val">${rx.qty} / ${rx.daysSupply}</span></div>
+              <div class="ins-row"><span class="ins-key">Billed Amount:</span><span class="ins-val mono">${fmtMoney(m.retail * rx.qty)}</span></div>
+              ${m.paRequired ? `<div class="ins-row" style="background:#ffe4e4;"><span class="ins-key" style="color:#c00000;">PA Required Flag:</span><span class="ins-val" style="color:#c00000;">YES — This drug requires Prior Authorization</span></div>` : ''}
+            </div>
+            <div class="spacer"></div>
+            <div style="display:flex;gap:6px;justify-content:flex-end;">
+              <button onclick="window._wfStep3Back()">← Back</button>
+              <button class="btn-primary" id="btn-submit-claim">▶ Submit Claim to ${esc(p.insurancePlan)} ›</button>
+            </div>
+            <div id="ins-progress-area"></div>
+          </div>
+        `;
+      } else if (wf.insResult === 'REJECTED') {
+        // BIG REJECTION BANNER — key demo moment
+        return `
+          <div class="rejection-banner">
+            <div class="rej-title">⚠ INSURANCE CLAIM REJECTED</div>
+            <div>Plan: <b>${esc(p.insurancePlan)}</b> &nbsp;|&nbsp; Member: <b>${esc(p.insuranceId)}</b> &nbsp;|&nbsp; Drug: <b>${esc(m.name)}</b></div>
+            <div class="rej-detail">NCPDP REJECT CODE: 75 — PRIOR AUTHORIZATION REQUIRED
+Billed: ${fmtMoney(m.retail * rx.qty)}   Paid: $0.00   Copay Collected: $0.00
+Prescriber: ${esc(d ? d.name : '')}   NPI: ${esc(d ? d.npi : '')}
+Submitted: ${fmtDateTime(new Date())}</div>
+            <div class="rej-actions">
+              <button class="rej-btn-primary" onclick="window._wfInitiatePA()">📋 Initiate Prior Authorization</button>
+              <button onclick="window._wfOfferCashPrice()">💲 Offer Patient Cash Price</button>
+              <button onclick="window._wfContactPrescriber2()">📞 Contact Prescriber</button>
+            </div>
+          </div>
+
+          <div class="groupbox">
+            <span class="gb-title">Rejection Detail &amp; Required Actions</span>
+            <div class="form-grid">
+              <label>Reject Code:</label><input readonly value="75 — Prior Authorization Required" style="background:#ffe4e4;font-weight:bold;">
+              <label>Payer:</label><input readonly value="${esc(p.insurancePlan)}">
+              <label>Drug Requiring PA:</label><input readonly value="${esc(m.name)} [NDC ${esc(m.ndc)}]">
+              <label>Prescriber to Contact:</label><input readonly value="${esc(d ? d.name : '')} · ${esc(d ? d.phone : '')}">
+              <label>Patient Notified:</label><input readonly value="NOT YET — action required" style="background:#ffe4e4;">
+              <label>PA Form Needed:</label><input readonly value="${esc(p.insurancePlan)} — PA for ${esc(m.brand || m.generic || m.name)}">
+            </div>
+            <div class="notice" style="margin-top:8px;">
+              <b>Playbook:</b> Do NOT dispense until Prior Authorization is received or patient agrees to pay cash price.
+              Contact <b>${esc(d ? d.name : 'prescriber')}</b> at <b>${esc(d ? d.phone : '')}</b> to initiate PA paperwork.
+            </div>
+            <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:8px;">
+              <button onclick="window._wfStep3Back()">← Back</button>
+            </div>
+          </div>
+        `;
+      } else {
+        // APPROVED
+        return `
+          <div class="approval-banner">
+            <div class="apv-title">✓ CLAIM APPROVED</div>
+            <div>Plan: <b>${esc(p.insurancePlan)}</b> · Billed: <b>${fmtMoney(m.retail * rx.qty)}</b> · Plan Pays: <b>${fmtMoney(m.retail * rx.qty - wf.copay)}</b> · Patient Copay: <b>${fmtMoney(wf.copay)}</b></div>
+          </div>
+
+          <div class="groupbox">
+            <span class="gb-title">Adjudication Result</span>
+            <div class="form-grid">
+              <label>Authorization #:</label><input readonly value="${wf._authNum || 'AUTH-' + Math.floor(Math.random()*900000+100000)}">
+              <label>Plan Paid:</label><input readonly value="${fmtMoney(m.retail * rx.qty - wf.copay)}" style="background:#e4ffe4;">
+              <label>Patient Copay:</label><input readonly value="${fmtMoney(wf.copay)}" style="background:#e4ffe4;font-weight:bold;">
+              <label>Adjudication Time:</label><input readonly value="${fmtDateTime(new Date())}">
+              <label>Formulary Tier:</label><input readonly value="Tier 1 — Preferred Generic">
+              <label>Coverage Year:</label><input readonly value="2026 (Active)">
+            </div>
+            <div class="spacer"></div>
+            <div style="display:flex;gap:6px;justify-content:flex-end;">
+              <button onclick="window._wfStep3Back()">← Back</button>
+              <button class="btn-primary" onclick="window._wfStep3Continue()">▶ Continue to Inventory Check ›</button>
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    setTimeout(() => {
+      const submitBtn = document.getElementById('btn-submit-claim');
+      if (!submitBtn) return;
+      submitBtn.onclick = () => {
+        const area = document.getElementById('ins-progress-area');
+        if (!area) return;
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Submitting...';
+        area.innerHTML = `
+          <div class="notice" style="margin-top:8px;">Transmitting NCPDP D.0 claim to ${esc(getWfPatient().insurancePlan)}...</div>
+          <div class="progress-track"><div class="progress-bar" id="ins-bar" style="width:0%;"></div></div>`;
+        let v = 0;
+        const iv = setInterval(() => {
+          v += 8;
+          const bar = document.getElementById('ins-bar');
+          if (bar) bar.style.width = Math.min(v, 100) + '%';
+          if (v >= 100) {
+            clearInterval(iv);
+            const rx = getWfRx();
+            const m = getWfMed();
+            const p = getWfPatient();
+            const rejected = wf.demoScenario === 'ins-rejected' || m.paRequired;
+            if (rejected) {
+              wf.insResult = 'REJECTED';
+              log('INS_CLAIM_REJECTED', `Rx ${rx.id} — code 75 PA required`);
+            } else {
+              wf.insResult = 'APPROVED';
+              wf.copay = parseFloat((p.copay || '$10').match(/\d+/)?.[0] || '10');
+              wf._authNum = 'AUTH-' + Math.floor(Math.random()*900000+100000);
+              // Record claim
+              const claim = { id: nextClaimId(), rxFillId: 'wf-' + Date.now(), patientId: p.id, medId: m.id, billed: m.retail * rx.qty, paid: m.retail * rx.qty - wf.copay, copay: wf.copay, status: 'PAID', submittedAt: new Date().toISOString() };
+              state.claims.unshift(claim);
+              wf.claimId = claim.id;
+              saveState();
+              log('INS_CLAIM_APPROVED', `Rx ${rx.id} — auth ${wf._authNum} copay ${fmtMoney(wf.copay)}`);
+            }
+            rerender();
+          }
+        }, 80);
+      };
+
+      window._wfStep3Back = () => { wf.step = 2; wf.insResult = null; rerender(); };
+      window._wfStep3Continue = () => { wf.step = 4; rerender(); };
+
+      window._wfInitiatePA = () => {
+        const rx = getWfRx();
+        const m = getWfMed();
+        const p = getWfPatient();
+        const d = getPrescriber(rx.prescriberId);
+        const pa = { id: nextPAId(), patientId: p.id, medId: m.id, prescriberId: rx.prescriberId, status: 'PENDING_PROVIDER', requestedAt: new Date().toISOString(), diagnosis: 'Pending — to be provided by prescriber', notes: 'Initiated from Refill Workflow step 3. Fax to ' + (d ? d.name : '') };
+        state.priorAuths.unshift(pa);
+        // also record the rejected claim
+        const claim = { id: nextClaimId(), rxFillId: 'wf-' + Date.now(), patientId: p.id, medId: m.id, billed: m.retail * rx.qty, paid: 0, copay: 0, status: 'REJECTED', rejectCode: '75', rejectReason: 'PRIOR AUTHORIZATION REQUIRED', submittedAt: new Date().toISOString() };
+        state.claims.unshift(claim);
+        // put item in queue as REJECTED
+        const q = { id: nextQId(), rxId: rx.id, patientId: p.id, medId: m.id, requestedAt: new Date().toISOString(), source: 'Refill Workflow', status: 'REJECTED', notes: 'PA initiated: ' + pa.id };
+        state.refillQueue.unshift(q);
+        wf.queueId = q.id;
+        wf.paId = pa.id;
+        saveState();
+        log('PA_INITIATED', `${pa.id} for ${m.name} patient ${p.id} — fax to ${d ? d.name : ''}`);
+        toast(`PA ${pa.id} initiated. Fax dispatched to ${d ? d.name : 'prescriber'}'s office.`, 'info');
+        alertDialog('Prior Authorization Initiated', `<b>PA Reference: ${pa.id}</b><br><br>A Prior Authorization request has been faxed to:<br><b>${d ? esc(d.name) : 'Prescriber'}</b> · ${d ? esc(d.phone) : ''}<br><br>Expected response: 24–48 hours.<br><br><b>Do NOT dispense</b> until PA is approved or patient accepts cash price.<br><br>The refill queue item has been placed in REJECTED status pending PA outcome.`);
+        router.go('rx-pa');
+      };
+
+      window._wfOfferCashPrice = () => {
+        const m = getWfMed();
+        const rx = getWfRx();
+        alertDialog('Cash Price Option', `<b>Insurance was rejected.</b> You may offer the patient the cash price:<br><br>Drug: <b>${esc(m ? m.name : '')}</b><br>Quantity: <b>${rx ? rx.qty : ''} units</b><br>Cash Price: <b>${fmtMoney(m ? m.retail * rx.qty : 0)}</b><br><br>If patient agrees, proceed without insurance. Do NOT submit a paid claim.`);
+      };
+
+      window._wfContactPrescriber2 = () => {
+        const rx = getWfRx();
+        const d = rx ? getPrescriber(rx.prescriberId) : null;
+        alertDialog('Contact Prescriber', `Call or fax <b>${d ? esc(d.name) : 'prescriber'}</b> at <b>${d ? esc(d.phone) : 'N/A'}</b> to discuss:<br>• Prior Authorization for ${esc(getWfMed() ? getWfMed().name : '')}<br>• Alternative medication options<br>• Clinical justification documentation`);
+      };
+    }, 0);
+
+    // STEP 4 — Inventory Check
+    function renderStep4() {
+      const rx = getWfRx();
+      const m = getWfMed();
+      if (!rx || !m) return '<div class="notice err">Missing prescription data.</div>';
+
+      const pct = Math.min(100, Math.round((m.stock / m.reorderPt) * 100));
+      const lowStock = m.stock < rx.qty;
+      const belowReorder = m.stock < m.reorderPt;
+      const critical = m.stock < m.reorderPt / 2;
+
+      const barClass = critical ? 'stock-critical' : (belowReorder ? 'stock-low' : '');
+
+      return `
+        <div class="groupbox">
+          <span class="gb-title">Step 4 — Inventory Check</span>
+
+          <div style="margin:8px 0;">
+            <span class="status-pill ${lowStock ? 'spl-bad' : (belowReorder ? 'spl-warn' : 'spl-ok')}">
+              ${lowStock ? '❌ INSUFFICIENT STOCK — Supplier Order Required' : (belowReorder ? '⚠ LOW STOCK — Fill possible, reorder recommended' : '✓ SUFFICIENT STOCK — Ready to fill')}
+            </span>
+          </div>
+
+          <div class="form-grid" style="margin-top:8px;">
+            <label>Drug / NDC:</label><input readonly value="${esc(m.name)} [${esc(m.ndc)}]">
+            <label>Location:</label><input readonly value="${esc(m.location)}">
+            <label>Units on Hand:</label><input readonly value="${m.stock}" style="background:${lowStock ? '#ffe4e4' : (belowReorder ? '#ffe4a0' : '#e4ffe4')};font-weight:bold;">
+            <label>Units Needed:</label><input readonly value="${rx.qty}">
+            <label>Reorder Point:</label><input readonly value="${m.reorderPt}">
+            <label>Reorder Quantity:</label><input readonly value="${m.reorderQty}">
+            <label>Manufacturer:</label><input readonly value="${esc(m.mfr)}">
+            <label>Form:</label><input readonly value="${esc(m.form)}">
+          </div>
+
+          <div class="stock-meter" style="margin-top:10px;">
+            <span style="font-size:10px;white-space:nowrap;">Stock vs Reorder Pt</span>
+            <div class="stock-bar-wrap">
+              <div class="stock-bar-fill ${barClass}" style="width:${pct}%;"></div>
+            </div>
+            <span style="font-size:10px;white-space:nowrap;">${m.stock} / ${m.reorderPt} (${pct}%)</span>
+          </div>
+
+          <div class="spacer"></div>
+          <div style="display:flex;gap:6px;justify-content:flex-end;">
+            <button onclick="window._wfStep4Back()">← Back</button>
+            ${lowStock
+              ? `<button class="btn-primary" onclick="window._wfStep5Route('order')">⛟ Create Supplier Order ›</button>`
+              : `<button class="btn-primary" onclick="window._wfStep5Route('fill')">▶ Mark for Fulfillment ›</button>`
+            }
+            ${belowReorder && !lowStock ? `<button onclick="window._wfFlagReorder()">⚠ Flag for Reorder</button>` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    setTimeout(() => {
+      window._wfStep4Back = () => { wf.step = 3; rerender(); };
+      window._wfStep5Route = (mode) => {
+        wf._fillMode = mode;
+        wf.step = 5;
+        rerender();
+      };
+      window._wfFlagReorder = () => {
+        const m = getWfMed();
+        toast(`Reorder flag set for ${m.name}. Purchasing team notified.`, 'info');
+        log('REORDER_FLAG', `${m.id} ${m.name} stock ${m.stock} below reorder pt ${m.reorderPt}`);
+      };
+    }, 0);
+
+    // STEP 5 — Mark for Fulfillment
+    function renderStep5() {
+      const p = getWfPatient();
+      const rx = getWfRx();
+      const m = getWfMed();
+      if (!rx || !m) return '<div class="notice err">Missing data.</div>';
+
+      if (wf.fillComplete) {
+        // Already filled — show summary
+        return `
+          <div class="fill-summary">
+            <div class="fill-title">✓ REFILL FILLED AND LABELED</div>
+            <div class="fill-grid">
+              <span class="fill-key">Fill ID:</span><span class="fill-val mono">${esc(wf.queueId || 'WF-FILL')}</span>
+              <span class="fill-key">Claim #:</span><span class="fill-val mono">${esc(wf.claimId || 'CLAIM-PENDING')}</span>
+              <span class="fill-key">Qty Dispensed:</span><span class="fill-val">${rx.qty} × ${esc(m.form)}</span>
+              <span class="fill-key">Lot # / Expires:</span><span class="fill-val mono">${wf._lot || 'LOT-' + Math.floor(Math.random()*9000+1000)} / 2027-08</span>
+              <span class="fill-key">New Stock Level:</span><span class="fill-val">${m.stock} units</span>
+              <span class="fill-key">Patient Copay:</span><span class="fill-val">${fmtMoney(wf.copay)}</span>
+            </div>
+            <div style="margin-top:8px;font-size:10px;color:#006000;">Rx label printed · Bag label printed · Placed in Will-Call bin</div>
+          </div>
+          <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px;">
+            <button class="btn-primary" onclick="window._wfStep6Go()">📨 Notify Patient ›</button>
+          </div>
+        `;
+      }
+
+      if (wf._fillMode === 'order') {
+        // Out-of-stock path — create PO
+        return `
+          <div class="groupbox">
+            <span class="gb-title">Step 5 — Create Supplier Order (Out of Stock)</span>
+            <div class="notice err">Insufficient stock. A supplier order is required before this refill can be filled.</div>
+            <div class="form-grid" style="margin-top:8px;">
+              <label>Drug:</label><input readonly value="${esc(m.name)}">
+              <label>NDC:</label><input readonly value="${esc(m.ndc)}" class="mono">
+              <label>Supplier:</label>
+              <select id="s5-sup">
+                ${state.suppliers.map(s => `<option value="${s.id}" ${s.primary ? 'selected' : ''}>${esc(s.name)} — Lead time: ${esc(s.leadTime)}</option>`).join('')}
+              </select>
+              <label>Order Qty:</label>
+              <input type="number" id="s5-qty" value="${m.reorderQty}">
+              <label>Priority:</label>
+              <select id="s5-pri"><option>Routine</option><option>Next-Day</option><option selected>Same-Day Urgent</option></select>
+              <label>Notes:</label>
+              <input type="text" id="s5-notes" value="URGENT: patient refill pending for ${esc(p ? patientName(p) : '')}" class="span-3">
+            </div>
+            <div class="spacer"></div>
+            <div style="display:flex;gap:6px;justify-content:flex-end;">
+              <button onclick="window._wfStep5Back()">← Back</button>
+              <button class="btn-primary" id="btn-submit-po">⛟ Submit Purchase Order ›</button>
+            </div>
+          </div>
+        `;
+      }
+
+      // Normal fill path
+      return `
+        <div class="groupbox">
+          <span class="gb-title">Step 5 — Mark for Fulfillment</span>
+          <div class="notice ok">Stock confirmed. Marking prescription for dispensing.</div>
+          <div class="form-grid" style="margin-top:8px;">
+            <label>Drug:</label><input readonly value="${esc(m.name)}">
+            <label>NDC:</label><input readonly value="${esc(m.ndc)}" class="mono">
+            <label>Qty to Dispense:</label><input readonly value="${rx.qty} × ${esc(m.form)}">
+            <label>Stock After Fill:</label><input readonly value="${m.stock - rx.qty} units remaining" style="background:${m.stock - rx.qty < m.reorderPt ? '#ffe4a0' : '#e4ffe4'};">
+            <label>Lot Number:</label><input type="text" id="s5-lot" value="LOT-${Math.floor(Math.random()*9000+1000)}" class="mono">
+            <label>Expiry on Lot:</label><input type="date" id="s5-exp" value="2027-08-31">
+            <label>Patient Copay:</label><input readonly value="${fmtMoney(wf.copay)}" style="font-weight:bold;">
+            <label>Counseling Required:</label>
+            <label class="left"><input type="checkbox" id="s5-counsel" ${m.controlled ? 'checked' : ''}> Counseling offered / documented</label>
+            <label>Pharmacist Verify:</label>
+            <label class="left"><input type="checkbox" id="s5-verify" checked> Visually verified by RPh</label>
+          </div>
+          <div class="spacer"></div>
+          <div style="display:flex;gap:6px;justify-content:flex-end;">
+            <button onclick="window._wfStep5Back()">← Back</button>
+            <button class="btn-primary" id="btn-fill-rx">✓ Fill &amp; Label Rx ›</button>
+          </div>
+        </div>
+      `;
+    }
+
+    setTimeout(() => {
+      window._wfStep5Back = () => { wf.step = 4; rerender(); };
+      window._wfStep6Go = () => { wf.step = 6; rerender(); };
+
+      const fillBtn = document.getElementById('btn-fill-rx');
+      if (fillBtn) {
+        fillBtn.onclick = () => {
+          const counsel = document.getElementById('s5-counsel');
+          const verify = document.getElementById('s5-verify');
+          if (!verify || !verify.checked) {
+            toast('Pharmacist verification required before filling.', 'bad');
+            return;
+          }
+          // Commit the fill
+          const rx = getWfRx();
+          const m = getWfMed();
+          const p = getWfPatient();
+          wf._lot = document.getElementById('s5-lot').value;
+          m.stock = Math.max(0, m.stock - rx.qty);
+          rx.refillsRemaining = Math.max(0, rx.refillsRemaining - 1);
+          rx.lastFilled = new Date().toISOString().slice(0, 10);
+          const q = { id: nextQId(), rxId: rx.id, patientId: p.id, medId: m.id, requestedAt: new Date().toISOString(), source: 'Refill Workflow', status: 'READY', notes: 'Filled via workflow' };
+          state.refillQueue.unshift(q);
+          wf.queueId = q.id;
+          saveState();
+          log('RX_FILLED', `${rx.id} — ${m.name} x${rx.qty} for ${patientName(p)} lot ${wf._lot}`);
+          toast(`Rx filled. Bottle labeled. Placed in Will-Call.`, 'ok');
+          wf.fillComplete = true;
+          rerender();
+        };
+      }
+
+      const poBtn = document.getElementById('btn-submit-po');
+      if (poBtn) {
+        poBtn.onclick = () => {
+          const rx = getWfRx();
+          const m = getWfMed();
+          const p = getWfPatient();
+          const supplierId = document.getElementById('s5-sup').value;
+          const qty = parseInt(document.getElementById('s5-qty').value, 10) || m.reorderQty;
+          const notes = document.getElementById('s5-notes').value;
+          const po = { id: nextPOId(), supplierId, createdAt: new Date().toISOString(), status: 'IN_TRANSIT', items: [{ medId: m.id, qty, unitCost: m.awp, received: 0 }], notes };
+          state.purchaseOrders.unshift(po);
+          const q = { id: nextQId(), rxId: rx.id, patientId: p.id, medId: m.id, requestedAt: new Date().toISOString(), source: 'Refill Workflow', status: 'ON_ORDER', notes: 'Awaiting PO ' + po.id };
+          state.refillQueue.unshift(q);
+          wf.queueId = q.id;
+          saveState();
+          log('PO_CREATED', `${po.id} for ${m.name} qty ${qty} — patient refill pending`);
+          toast(`PO ${po.id} submitted to ${getSupplier(supplierId).name}. ETA: ${getSupplier(supplierId).leadTime}.`, 'ok');
+          wf.fillComplete = true;
+          wf._poId = po.id;
+          rerender();
+        };
+      }
+    }, 0);
+
+    // STEP 6 — Notify Patient
+    function renderStep6() {
+      const p = getWfPatient();
+      const m = getWfMed();
+      if (!p || !m) return '<div class="notice err">Missing patient data.</div>';
+
+      const isOrder = wf._fillMode === 'order';
+      const defaultMsg = isOrder
+        ? `Hi ${p.first}, your refill of ${m.name} is on order. We expect it in ${wf._poId ? getSupplier(state.purchaseOrders.find(po => po.id === wf._poId).supplierId).leadTime : '1-2 business days'}. We will text you as soon as it arrives. Thank you — Community Drugs #4471.`
+        : `Hi ${p.first}, your prescription for ${m.name} is ready for pickup at Community Drugs #4471, 227 Main Street. We're open 9am–9pm Mon–Sat. Reply STOP to opt out.`;
+
+      if (wf.notifSent) {
+        return `
+          <div class="fill-summary" style="background:#e4f0ff;border-color:#0040c0;">
+            <div class="fill-title" style="color:#002080;">📨 NOTIFICATION SENT</div>
+            <div class="fill-grid">
+              <span class="fill-key">Channel:</span><span class="fill-val">${esc(wf._notifChannel || 'SMS')}</span>
+              <span class="fill-key">Recipient:</span><span class="fill-val">${esc(p.first)} ${esc(p.last)} · ${esc(p.phone)}</span>
+              <span class="fill-key">Sent At:</span><span class="fill-val mono">${fmtDateTime(new Date())}</span>
+              <span class="fill-key">Ref #:</span><span class="fill-val mono">${esc(wf._notifId || 'N/A')}</span>
+            </div>
+          </div>
+          <div style="margin-top:16px;text-align:center;">
+            <div class="status-pill spl-ok" style="font-size:14px;padding:8px 24px;">REFILL WORKFLOW COMPLETE</div>
+            <div style="margin-top:12px;display:flex;gap:8px;justify-content:center;">
+              <button onclick="router.go('rx-queue')">≡ Back to Refill Queue</button>
+              <button onclick="router.go('dashboard')">⌂ Dashboard</button>
+              <button class="btn-primary" onclick="window._wfDemo.reset()">↻ New Refill</button>
+            </div>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="groupbox">
+          <span class="gb-title">Step 6 — Notify Patient</span>
+          <div class="notice ok">${isOrder ? 'Order placed. Notify patient of expected delay.' : 'Prescription ready. Notify patient for pickup.'}</div>
+          <div class="notify-compose">
+            <div class="form-grid" style="margin-bottom:8px;">
+              <label>Send Via:</label>
+              <select id="s6-chan">
+                <option value="SMS">SMS (Text Message)</option>
+                <option value="Email">Email</option>
+                <option value="Automated Call">Automated Phone Call</option>
+                <option value="App Push">App Push Notification</option>
+              </select>
+              <label>Recipient:</label>
+              <input readonly value="${esc(p.first)} ${esc(p.last)} — ${esc(p.phone)}">
+            </div>
+            <label style="display:block;margin-bottom:3px;">Message:</label>
+            <textarea id="s6-body" rows="5" style="width:100%;">${defaultMsg}</textarea>
+          </div>
+          <div class="spacer"></div>
+          <div style="display:flex;gap:6px;justify-content:flex-end;">
+            <button onclick="window._wfStep6Back()">← Back</button>
+            <button onclick="window._wfStep6Skip()">Skip — Notify Later</button>
+            <button class="btn-primary" id="btn-send-notif">📨 Send Notification</button>
+          </div>
+        </div>
+      `;
+    }
+
+    setTimeout(() => {
+      window._wfStep6Back = () => { wf.step = 5; rerender(); };
+      window._wfStep6Skip = () => {
+        log('NOTIFY_SKIPPED', `Patient ${wf.patientId} — chose notify later`);
+        toast('Notification deferred. Patient not yet notified.', 'info');
+        router.go('rx-queue');
+      };
+
+      const sendBtn = document.getElementById('btn-send-notif');
+      if (sendBtn) {
+        sendBtn.onclick = () => {
+          const chan = document.getElementById('s6-chan').value;
+          const body = document.getElementById('s6-body').value;
+          const p = getWfPatient();
+          const notif = { id: nextNotifId(), to: p.id, channel: chan, body, sentAt: new Date().toISOString() };
+          state.notifications.unshift(notif);
+          wf._notifChannel = chan;
+          wf._notifId = notif.id;
+          saveState();
+          log('NOTIFY_PICKUP', `${chan} to ${p.id} — ${body.slice(0, 60)}`);
+          toast(`Notification sent via ${chan} to ${p.first} ${p.last}.`, 'ok');
+          wf.notifSent = true;
+          rerender();
+        };
+      }
+    }, 0);
   }
 };
 
@@ -2098,6 +2947,7 @@ $('#btn-reset').onclick = () => {
   });
 };
 $('#btn-logout').onclick = () => alertDialog('Logout', 'Logout is disabled in this demo build.');
+$('#btn-refill-wf').onclick = () => router.go('refill-workflow');
 $('#btn-print').onclick = () => alertDialog('Print', 'Print dialog would appear here. Demo build does not include physical printer support.');
 
 // Folder toggles in tree

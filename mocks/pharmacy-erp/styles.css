@@ -617,3 +617,319 @@ button:disabled { color: #808080; cursor: not-allowed; }
 .step.done {
   background: #c0ffc0;
 }
+
+/* ============ REFILL WORKFLOW PAGE ============ */
+
+/* Full-page step wizard (not modal — demoable) */
+.wf-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 6px;
+  height: 100%;
+}
+
+.wf-steps-panel {
+  background: #c0c0c0;
+  border: 2px solid #fff;
+  border-right-color: #404040;
+  border-bottom-color: #404040;
+  display: flex;
+  flex-direction: column;
+}
+
+.wf-steps-header {
+  background: linear-gradient(90deg, #000080, #1084d0);
+  color: #fff;
+  padding: 4px 8px;
+  font-weight: bold;
+  font-size: 11px;
+}
+
+.wf-step-item {
+  display: flex;
+  align-items: flex-start;
+  padding: 8px 8px;
+  border-bottom: 1px solid #d0d0d0;
+  gap: 8px;
+  font-size: 11px;
+  cursor: default;
+}
+
+.wf-step-item.wf-step-active {
+  background: #000080;
+  color: #fff;
+}
+
+.wf-step-item.wf-step-done {
+  background: #d8f8d8;
+  color: #006000;
+}
+
+.wf-step-item.wf-step-rejected {
+  background: #ffe4e4;
+  color: #800000;
+}
+
+.wf-step-num {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  border-radius: 0;
+  background: #808080;
+  color: #fff;
+  text-align: center;
+  font-weight: bold;
+  font-size: 11px;
+  line-height: 18px;
+  border: 1px solid #404040;
+}
+
+.wf-step-active .wf-step-num {
+  background: #fff;
+  color: #000080;
+}
+
+.wf-step-done .wf-step-num {
+  background: #008000;
+  color: #fff;
+}
+
+.wf-step-rejected .wf-step-num {
+  background: #c00000;
+  color: #fff;
+}
+
+.wf-step-label { font-weight: bold; line-height: 1.3; }
+.wf-step-sub { font-size: 10px; opacity: 0.8; }
+
+.wf-content-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: auto;
+}
+
+/* Big rejection banner */
+.rejection-banner {
+  background: #c00000;
+  color: #fff;
+  border: 3px solid #800000;
+  padding: 12px 16px;
+  margin: 6px 0;
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.rejection-banner .rej-title {
+  font-size: 18px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.rejection-banner .rej-detail {
+  font-size: 11px;
+  font-weight: normal;
+  background: rgba(0,0,0,0.25);
+  padding: 4px 8px;
+  margin-top: 6px;
+  font-family: "Lucida Console", monospace;
+}
+
+.rejection-banner .rej-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+}
+
+.rejection-banner .rej-actions button {
+  background: #fff;
+  color: #c00000;
+  border: 2px solid #fff;
+  font-weight: bold;
+  padding: 4px 14px;
+  font-size: 12px;
+}
+
+.rejection-banner .rej-actions button.rej-btn-primary {
+  background: #ffff00;
+  color: #800000;
+  border-color: #ffff00;
+}
+
+/* Approval banner */
+.approval-banner {
+  background: #006000;
+  color: #fff;
+  border: 3px solid #004000;
+  padding: 10px 16px;
+  margin: 6px 0;
+}
+
+.approval-banner .apv-title {
+  font-size: 15px;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+/* Patient search result within workflow */
+.wf-patient-card {
+  background: #fff;
+  border: 2px solid #404040;
+  border-right-color: #fff;
+  border-bottom-color: #fff;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 16px;
+  font-size: 11px;
+}
+
+.wf-patient-card .wf-pc-label { color: #606060; }
+.wf-patient-card .wf-pc-value { font-weight: bold; }
+.wf-patient-card .wf-pc-allergy { color: #c00000; font-weight: bold; }
+
+/* Rx selector in workflow */
+.rx-select-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 1px solid #d0d0d0;
+  background: #fff;
+  cursor: pointer;
+  margin-bottom: 2px;
+}
+
+.rx-select-row:hover { background: #ffffcc; }
+.rx-select-row.rx-selected { background: #e0e8ff; border-color: #000080; }
+.rx-select-row .rx-sr-name { font-weight: bold; flex: 1; }
+.rx-select-row .rx-sr-meta { font-size: 10px; color: #606060; }
+
+/* Insurance check status box */
+.ins-check-box {
+  border: 2px solid #404040;
+  border-right-color: #fff;
+  border-bottom-color: #fff;
+  background: #fff;
+  padding: 8px;
+  font-size: 11px;
+  margin: 4px 0;
+}
+
+.ins-check-box .ins-row { display: flex; gap: 8px; padding: 2px 0; border-bottom: 1px solid #e8e8e8; }
+.ins-check-box .ins-key { width: 160px; color: #606060; flex-shrink: 0; }
+.ins-check-box .ins-val { font-weight: bold; }
+
+/* Stock level display */
+.stock-meter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.stock-bar-wrap {
+  flex: 1;
+  height: 18px;
+  background: #e0e0e0;
+  border: 2px solid #404040;
+  border-right-color: #fff;
+  border-bottom-color: #fff;
+  position: relative;
+}
+
+.stock-bar-fill {
+  height: 100%;
+  background: #008000;
+  transition: width 0.4s ease;
+}
+
+.stock-bar-fill.stock-low { background: #c06000; }
+.stock-bar-fill.stock-critical { background: #c00000; }
+
+/* Demo scenario buttons */
+.demo-scenario-strip {
+  background: #ffe4a0;
+  border: 2px solid #c08000;
+  border-right-color: #ffe080;
+  border-bottom-color: #ffe080;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+
+.demo-scenario-strip .demo-label {
+  font-weight: bold;
+  color: #806000;
+  white-space: nowrap;
+}
+
+/* Fulfillment summary box */
+.fill-summary {
+  background: #e4ffe4;
+  border: 2px solid #008000;
+  padding: 8px 12px;
+  margin: 6px 0;
+}
+
+.fill-summary .fill-title {
+  font-size: 13px;
+  font-weight: bold;
+  color: #006000;
+  margin-bottom: 6px;
+}
+
+.fill-summary .fill-grid {
+  display: grid;
+  grid-template-columns: 160px 1fr 160px 1fr;
+  gap: 4px 8px;
+  font-size: 11px;
+}
+
+.fill-summary .fill-key { color: #404040; }
+.fill-summary .fill-val { font-weight: bold; }
+
+/* Notification composer */
+.notify-compose {
+  background: #fff;
+  border: 2px solid #404040;
+  border-right-color: #fff;
+  border-bottom-color: #fff;
+  padding: 8px;
+}
+
+/* animation for "processing" shimmer */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.processing-shimmer {
+  background: linear-gradient(90deg, #c0c0c0 25%, #d8d8d8 50%, #c0c0c0 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.2s infinite;
+  height: 14px;
+  margin: 4px 0;
+}
+
+/* Large status pill used in workflow */
+.status-pill {
+  display: inline-block;
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: bold;
+  border: 2px solid;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-pill.spl-ok { background: #c0ffc0; border-color: #008000; color: #004000; }
+.status-pill.spl-bad { background: #ffc0c0; border-color: #c00000; color: #600000; }
+.status-pill.spl-warn { background: #ffe080; border-color: #c08000; color: #604000; }
+.status-pill.spl-info { background: #c0d8ff; border-color: #0040c0; color: #002080; }
