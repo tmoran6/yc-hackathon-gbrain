@@ -94,6 +94,28 @@ actor SessionUploader {
         session = nil
     }
 
+    /// Discard the recording: delete the remote session row + its uploaded
+    /// Storage objects (the dashboard handles the cascade/cleanup).
+    func discard() async {
+        guard let info = session else {
+            session = nil
+            return
+        }
+        let endpoint = dashboardURL
+            .appendingPathComponent("api/sessions")
+            .appendingPathComponent(info.id)
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "DELETE"
+        request.timeoutInterval = 30
+        do {
+            _ = try await URLSession.shared.data(for: request)
+            NSLog("SessionUploader: discarded session \(info.id)")
+        } catch {
+            NSLog("SessionUploader: discard() failed: \(error)")
+        }
+        session = nil
+    }
+
     func uploadScreenshot(data: Data, filename: String) async {
         guard let info = session else { return }
         let path = info.screenshotsPrefix + filename

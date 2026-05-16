@@ -34,6 +34,45 @@ export async function listObjects(prefix: string): Promise<StorageObject[]> {
   return (await res.json()) as StorageObject[];
 }
 
+export async function deleteObjects(paths: string[]): Promise<void> {
+  if (paths.length === 0) return;
+  const { url, key, bucket } = getStorageConfig();
+  const res = await fetch(`${url}/storage/v1/object/${bucket}`, {
+    method: "DELETE",
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ prefixes: paths }),
+  });
+  if (!res.ok) {
+    throw new Error(
+      `Storage delete failed: ${res.status} ${await res.text().catch(() => "")}`,
+    );
+  }
+}
+
+// Remove every object under <sessionId>/ (screenshots + transcripts).
+// Returns how many objects were deleted.
+export async function deleteSessionObjects(
+  sessionId: string,
+): Promise<number> {
+  const prefixes = [
+    `${sessionId}/screenshots/`,
+    `${sessionId}/transcripts/`,
+  ];
+  const paths: string[] = [];
+  for (const prefix of prefixes) {
+    const objs = await listObjects(prefix).catch(() => []);
+    for (const o of objs) {
+      if (o.name && !o.name.endsWith("/")) paths.push(`${prefix}${o.name}`);
+    }
+  }
+  await deleteObjects(paths);
+  return paths.length;
+}
+
 export function publicUrl(path: string): string {
   const { url, bucket } = getStorageConfig();
   return `${url}/storage/v1/object/public/${bucket}/${encodePath(path)}`;
