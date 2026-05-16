@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>GreaseMonkey Shop Manager v6.3.21 - Industrial Edition</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ============ TITLE BAR ============ -->
+<div id="titlebar">
+  <span class="title-text">█ GREASEMONKEY SHOP MANAGER &nbsp; v6.3.21 &nbsp;|&nbsp; INDUSTRIAL EDITION &nbsp;|&nbsp; [LICENSED: PETE'S AUTOMOTIVE - SHOP #4471]</span>
+  <span class="title-buttons">
+    <span class="title-btn">_</span>
+    <span class="title-btn">▣</span>
+    <span class="title-btn close">×</span>
+  </span>
+</div>
+
+<!-- ============ MENU BAR ============ -->
+<div id="menubar">
+  <span class="menu-item"><u>F</u>ile</span>
+  <span class="menu-item"><u>C</u>ustomer</span>
+  <span class="menu-item"><u>V</u>ehicle</span>
+  <span class="menu-item"><u>E</u>stimate</span>
+  <span class="menu-item"><u>W</u>ork Order</span>
+  <span class="menu-item"><u>P</u>arts</span>
+  <span class="menu-item"><u>S</u>chedule</span>
+  <span class="menu-item"><u>I</u>nvoice</span>
+  <span class="menu-item"><u>R</u>eport</span>
+  <span class="menu-item"><u>T</u>ools</span>
+  <span class="menu-item"><u>H</u>elp</span>
+</div>
+
+<!-- ============ TOOLBAR ============ -->
+<div id="toolbar">
+  <button class="tb-btn" data-nav="dashboard"><span class="tb-ico">▣</span><br>Desk</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" data-nav="customers"><span class="tb-ico">👤</span><br>Customer</button>
+  <button class="tb-btn" data-nav="vehicles"><span class="tb-ico">🚗</span><br>Vehicle</button>
+  <button class="tb-btn" data-nav="checkin"><span class="tb-ico">▶</span><br>Check-In</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" data-nav="estimates"><span class="tb-ico">$</span><br>Estimate</button>
+  <button class="tb-btn" data-nav="workorders"><span class="tb-ico">⚙</span><br>Work Ord</button>
+  <button class="tb-btn" data-nav="invoices"><span class="tb-ico">▦</span><br>Invoice</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" data-nav="parts"><span class="tb-ico">⛯</span><br>Parts</button>
+  <button class="tb-btn" data-nav="vendors"><span class="tb-ico">⛟</span><br>Vendors</button>
+  <button class="tb-btn" data-nav="bays"><span class="tb-ico">▥</span><br>Bays</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" data-nav="reports"><span class="tb-ico">📊</span><br>Reports</button>
+  <button class="tb-btn" id="btn-print"><span class="tb-ico">🖶</span><br>Print</button>
+  <button class="tb-btn" id="btn-reset"><span class="tb-ico">⟲</span><br>Reset</button>
+</div>
+
+<!-- ============ MAIN LAYOUT ============ -->
+<div id="main">
+  <!-- LEFT SIDEBAR: NAVIGATION TREE -->
+  <div id="sidebar" class="panel-sunken">
+    <div class="sidebar-header">▼ NAVIGATOR</div>
+    <div class="sidebar-body" id="nav-tree">
+      <div class="tree-node tree-root open">
+        <span class="tree-toggle">▼</span> ■ Shop Operations
+      </div>
+      <div class="tree-children">
+        <div class="tree-node" data-nav="dashboard">▣ Service Desk</div>
+        <div class="tree-node tree-folder open">
+          <span class="tree-toggle">▼</span> ▤ Customer File
+        </div>
+        <div class="tree-children indent-2">
+          <div class="tree-node" data-nav="customers">👤 Customer Lookup</div>
+          <div class="tree-node" data-nav="customer-new">+ New Customer</div>
+          <div class="tree-node" data-nav="vehicles">🚗 Vehicle Records</div>
+        </div>
+        <div class="tree-node tree-folder open">
+          <span class="tree-toggle">▼</span> ▤ Repair Orders
+        </div>
+        <div class="tree-children indent-2">
+          <div class="tree-node" data-nav="checkin">▶ Vehicle Check-In</div>
+          <div class="tree-node" data-nav="estimates">$ Estimates Queue</div>
+          <div class="tree-node" data-nav="workorders">⚙ Active Work Orders</div>
+          <div class="tree-node" data-nav="qc-queue">✓ QC / Ready</div>
+          <div class="tree-node" data-nav="invoices">▦ Invoices</div>
+        </div>
+        <div class="tree-node tree-folder open">
+          <span class="tree-toggle">▼</span> ▤ Parts &amp; Inventory
+        </div>
+        <div class="tree-children indent-2">
+          <div class="tree-node" data-nav="parts">⛯ Parts Catalog</div>
+          <div class="tree-node" data-nav="parts-orders">⛟ Parts Orders</div>
+          <div class="tree-node" data-nav="vendors">🏭 Vendors</div>
+        </div>
+        <div class="tree-node tree-folder open">
+          <span class="tree-toggle">▼</span> ▤ Shop Floor
+        </div>
+        <div class="tree-children indent-2">
+          <div class="tree-node" data-nav="bays">▥ Bay / Tech Schedule</div>
+          <div class="tree-node" data-nav="techs">🔧 Technicians</div>
+          <div class="tree-node" data-nav="labor-book">📕 Labor Book</div>
+        </div>
+        <div class="tree-node tree-folder open">
+          <span class="tree-toggle">▼</span> ▤ Reports
+        </div>
+        <div class="tree-children indent-2">
+          <div class="tree-node" data-nav="reports">📊 Reports Center</div>
+          <div class="tree-node" data-nav="report-revenue">💲 Daily Revenue</div>
+          <div class="tree-node" data-nav="report-tech-prod">⏱ Tech Productivity</div>
+          <div class="tree-node" data-nav="report-warranty">🛡 Warranty Log</div>
+        </div>
+        <div class="tree-node tree-folder">
+          <span class="tree-toggle">►</span> ▤ Utilities
+        </div>
+        <div class="tree-children indent-2 hidden">
+          <div class="tree-node" data-nav="vin-decoder">▪ VIN Decoder</div>
+          <div class="tree-node" data-nav="tsb">▪ TSB / Recall Lookup</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTER: CONTENT AREA -->
+  <div id="content">
+    <!-- TAB STRIP -->
+    <div id="tabstrip"></div>
+    <!-- ACTIVE PAGE -->
+    <div id="page" class="panel-sunken"></div>
+  </div>
+</div>
+
+<!-- ============ STATUS BAR ============ -->
+<div id="statusbar">
+  <span class="sb-cell" id="sb-user">USR: <b>PETE.S</b></span>
+  <span class="sb-cell">SHOP: PETE'S AUTOMOTIVE</span>
+  <span class="sb-cell">RATE: $135.00/HR</span>
+  <span class="sb-cell" id="sb-pending">OPEN RO: <b id="sb-open-count">0</b></span>
+  <span class="sb-cell" id="sb-bays">BAY: <b id="sb-bay-count">0/5</b></span>
+  <span class="sb-cell sb-flex"></span>
+  <span class="sb-cell">OVR</span>
+  <span class="sb-cell" id="sb-clock">--:--:--</span>
+</div>
+
+<!-- ============ FUNCTION KEY BAR ============ -->
+<div id="fkeys">
+  <span class="fk"><b>F1</b>=Help</span>
+  <span class="fk"><b>F2</b>=Save</span>
+  <span class="fk"><b>F3</b>=Find</span>
+  <span class="fk"><b>F4</b>=Menu</span>
+  <span class="fk"><b>F5</b>=Refresh</span>
+  <span class="fk"><b>F6</b>=Print</span>
+  <span class="fk"><b>F7</b>=New RO</span>
+  <span class="fk"><b>F8</b>=Delete</span>
+  <span class="fk"><b>F9</b>=Calc</span>
+  <span class="fk"><b>F10</b>=Exit</span>
+  <span class="fk-flex"></span>
+  <span class="fk">[ALT]+letter for menu</span>
+</div>
+
+<!-- ============ MODAL CONTAINER ============ -->
+<div id="modal-backdrop" class="hidden">
+  <div id="modal" class="window-frame">
+    <div class="window-title">
+      <span id="modal-title">Dialog</span>
+      <span class="title-buttons"><span class="title-btn close" id="modal-close">×</span></span>
+    </div>
+    <div class="window-body" id="modal-body"></div>
+    <div class="window-footer" id="modal-footer"></div>
+  </div>
+</div>
+
+<!-- ============ TOAST ============ -->
+<div id="toast-container"></div>
+
+<script src="seed.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
