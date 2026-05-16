@@ -1,1 +1,5 @@
 .next
+.beads/
+.claude/
+.runtime/
+CLAUDE.md
