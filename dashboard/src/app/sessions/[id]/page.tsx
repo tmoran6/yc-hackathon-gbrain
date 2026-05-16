@@ -8,6 +8,7 @@ import AnalysisPanel, { type AnalyzerResult } from "./AnalysisPanel";
 import UserReviewPanel, { type AnalysisEdits } from "./UserReviewPanel";
 import TagsEditor from "./TagsEditor";
 import { suggestTags } from "@/lib/tags";
+import { brainPageFor, mergeWorkflow } from "@/lib/brain";
 
 export const dynamic = "force-dynamic";
 
@@ -138,12 +139,28 @@ export default async function SessionPage({
           reviewState={analysis?.review_state ?? null}
           recording={analysis?.recording ?? null}
           updatedAt={analysis?.updated_at ?? null}
+          brainPage={resolveBrainPage(analysis)}
         />
       )}
 
       <SessionViewer screenshots={screenshots} transcripts={transcripts} />
     </main>
   );
+}
+
+function resolveBrainPage(
+  analysis: {
+    result: AnalyzerResult;
+    edits: AnalysisEdits | null;
+    review_state: "user_review" | "confirmed" | "discarded";
+  } | null,
+) {
+  if (!analysis || analysis.review_state !== "confirmed") return null;
+  const merged = mergeWorkflow(
+    analysis.result?.workflow,
+    analysis.edits?.workflow,
+  );
+  return brainPageFor(merged.title);
 }
 
 function Field({
