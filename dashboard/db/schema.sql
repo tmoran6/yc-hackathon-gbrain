@@ -1,37 +1,33 @@
--- Screenshots / footage uploaded by clients.
+-- Recording sessions. Each click of "Start Recording" mints a new session row.
 --
 -- Flow:
---   1. Client POSTs to /api/uploads with { username, captured_at } and gets
---      back an id. Row is created with status='pending', image_data=NULL.
---   2. Client connects directly to Postgres and writes the blob:
---        UPDATE screenshots
---           SET image_data = $1,
---               content_type = $2,
---               byte_size = octet_length($1),
---               status = 'uploaded',
---               uploaded_at = now()
---         WHERE id = $3 AND status = 'pending';
+--   1. Client POSTs to /api/sessions with { username } and gets back a session
+--      id plus the Supabase Storage coordinates (url, key, bucket, prefixes).
+--   2. Client uploads PNG frames directly to Supabase Storage at
+--        <bucket>/<session_id>/screenshots/<seq>.png
+--   3. Client uploads transcript chunks directly to Supabase Storage at
+--        <bucket>/<session_id>/transcripts/<index>.txt
+--   4. Client POSTs to /api/sessions/<id>/end when stopping.
 --
--- bytea is not ideal for huge blobs but is fine for hackathon-scale frames.
+-- No per-file rows in Postgres — the file list lives in Storage. Hackathon.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-CREATE TABLE IF NOT EXISTS screenshots (
-  id            uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-  username      text        NOT NULL,
-  captured_at   timestamptz NOT NULL,
-  status        text        NOT NULL DEFAULT 'pending'
-                            CHECK (status IN ('pending', 'uploaded', 'failed')),
-  content_type  text,
-  byte_size     integer,
-  image_data    bytea,
-  metadata      jsonb       NOT NULL DEFAULT '{}'::jsonb,
-  created_at    timestamptz NOT NULL DEFAULT now(),
-  uploaded_at   timestamptz
+DROP TABLE IF EXISTS screenshots;
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  username    text        NOT NULL,
+  status      text        NOT NULL DEFAULT 'active'
+                          CHECK (status IN ('active', 'ended')),
+  started_at  timestamptz NOT NULL DEFAULT now(),
+  ended_at    timestamptz,
+  metadata    jsonb       NOT NULL DEFAULT '{}'::jsonb,
+  created_at  timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS screenshots_username_captured_at_idx
-  ON screenshots (username, captured_at DESC);
+CREATE INDEX IF NOT EXISTS sessions_username_started_at_idx
+  ON sessions (username, started_at DESC);
 
-CREATE INDEX IF NOT EXISTS screenshots_status_idx
-  ON screenshots (status);
+CREATE INDEX IF NOT EXISTS sessions_status_idx
+  ON sessions (status);

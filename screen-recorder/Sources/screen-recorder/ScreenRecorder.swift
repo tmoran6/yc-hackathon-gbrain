@@ -11,12 +11,15 @@ final class ScreenRecorder {
     private var inFlight = false
     private let audioRecorder: AudioRecorder
     private var audioEnabled = false
+    private let uploader: SessionUploader
 
     var isRecordingAudio: Bool { audioRecorder.isRecording }
 
     init() {
         let transcriber = ElevenLabsTranscriber(apiKey: Secrets.elevenLabsAPIKey)
-        audioRecorder = AudioRecorder(transcriber: transcriber)
+        let uploader = SessionUploader(dashboardURL: Secrets.dashboardURL)
+        self.uploader = uploader
+        audioRecorder = AudioRecorder(transcriber: transcriber, uploader: uploader)
         audioRecorder.onStateChange = { [weak self] in
             self?.onStateChange?()
         }
@@ -28,7 +31,7 @@ final class ScreenRecorder {
         return movies.appendingPathComponent("ScreenRecorder")
     }
 
-    func start(withAudio: Bool) {
+    func start(withAudio: Bool, username: String) {
         guard !isRecording else { return }
 
         let formatter = DateFormatter()
@@ -50,6 +53,16 @@ final class ScreenRecorder {
         onStateChange?()
 
         NSLog("ScreenRecorder: started -> \(dir.path) (audio: \(withAudio))")
+
+        let uploader = self.uploader
+        Task {
+            do {
+                let info = try await uploader.register(username: username)
+                NSLog("ScreenRecorder: registered session \(info.id)")
+            } catch {
+                NSLog("ScreenRecorder: session registration failed: \(error)")
+            }
+        }
 
         if withAudio {
             audioRecorder.start(in: dir)
@@ -74,6 +87,8 @@ final class ScreenRecorder {
             NSLog("ScreenRecorder: stopped. \(frameCount) frames in \(dir.path)")
         }
         sessionDir = nil
+        let uploader = self.uploader
+        Task { await uploader.end() }
         onStateChange?()
     }
 
@@ -115,6 +130,8 @@ final class ScreenRecorder {
                 bitmap.size = NSSize(width: cgImage.width, height: cgImage.height)
                 guard let data = bitmap.representation(using: .png, properties: [:]) else { return }
                 try data.write(to: url)
+
+                await self.uploader.uploadScreenshot(data: data, filename: filename)
 
                 await MainActor.run {
                     self.frameCount += 1
