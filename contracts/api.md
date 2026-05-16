@@ -41,7 +41,20 @@ Asks GBrain a plain-English question; answer comes from committed skills.
 { "question": "A patient needs a refill but their insurance was rejected — what do I do?" }
 ```
 
-**Behavior:** run `gbrain query "<question>"` and stream stdout.
+**Behavior — IMPORTANT, do NOT use `gbrain query` for the answer.**
+`gbrain query`/`ask` synthesis is broken in this environment (hangs 40–120s,
+never completes). Use this PROVEN path instead — see `contracts/ask-reference.mjs`
+for a working, tested implementation (~8s total, correct answers):
+
+1. **Retrieve** (robust hybrid vector+keyword, capped):
+   `timeout 8 gbrain query "<question>" --limit 5 2>/dev/null || true`
+   Parse the first line matching `^\[<score>\]  (skills/<slug>)` to get the slug.
+   (We cap it because retrieval lines emit at ~4s, then synthesis hangs — we
+   discard the hang.)
+2. **Get the page:** `gbrain get "<slug>"` — fast, returns full markdown.
+3. **Synthesize** with a direct Anthropic API call (`claude-sonnet-4-6`),
+   system prompt = "answer using ONLY this skill page", **stream the response**
+   to the client.
 
 **Response:** `Content-Type: text/plain; charset=utf-8`, **streamed** (chunked).
 The body is the answer text as it is produced. UI renders it incrementally.
