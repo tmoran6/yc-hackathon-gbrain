@@ -43,6 +43,31 @@ npm run analyze                       # newest session
 npm run analyze -- --session ~/Movies/ScreenRecorder/session_2026-05-16_11-53-52
 ```
 
+## Auto-push to Supabase
+
+Run the analyzer as a long-lived watcher (the "server" — no per-recording
+command needed):
+
+```sh
+cd analyzer
+npm run watch          # stays running; analyzes + pushes every recording
+```
+
+End-to-end on every recording:
+
+1. Screen-recorder registers the session with the dashboard, gets a
+   `session_id`, and writes it into the recording folder as `session.json`.
+2. ~8s after frames stop, the watcher analyzes the session.
+3. It reads `session.json` and `POST`s the result to
+   `DASHBOARD_URL/api/sessions/<session_id>/analysis`, which upserts one row
+   into the Supabase `analysis` table (FK → `sessions.id`, JSON `result`).
+
+`DASHBOARD_URL` defaults to `http://localhost:3000`; override in
+`analyzer/.env` or with `--dashboard-url`. Requires the Next.js dashboard
+running (the recorder already needs it to register sessions). If `session.json`
+is missing (older recordings), analysis still runs locally — the push is just
+skipped.
+
 ## Options
 
 | flag | default | meaning |
