@@ -23,14 +23,22 @@ CREATE TABLE IF NOT EXISTS sessions (
   started_at  timestamptz NOT NULL DEFAULT now(),
   ended_at    timestamptz,
   metadata    jsonb       NOT NULL DEFAULT '{}'::jsonb,
+  tags        text[]      NOT NULL DEFAULT '{}'::text[],
   created_at  timestamptz NOT NULL DEFAULT now()
 );
+
+-- Idempotent column add for pre-existing sessions tables that pre-date tags.
+ALTER TABLE sessions
+  ADD COLUMN IF NOT EXISTS tags text[] NOT NULL DEFAULT '{}'::text[];
 
 CREATE INDEX IF NOT EXISTS sessions_username_started_at_idx
   ON sessions (username, started_at DESC);
 
 CREATE INDEX IF NOT EXISTS sessions_status_idx
   ON sessions (status);
+
+CREATE INDEX IF NOT EXISTS sessions_tags_gin_idx
+  ON sessions USING GIN (tags);
 
 -- Analysis results from the local analyzer (Gemini-based).
 -- One row per session (PK on session_id). `result` is the raw analyzer JSON;

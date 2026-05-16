@@ -4,19 +4,41 @@ import { formatDuration, formatTimestamp } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
+type SessionStatus = "active" | "ended";
+type ReviewState = "user_review" | "confirmed" | "discarded";
+
 type SessionRow = {
   id: string;
   username: string;
-  status: "active" | "ended";
+  status: SessionStatus;
   started_at: Date;
   ended_at: Date | null;
   workflow_title: string | null;
+  review_state: ReviewState | null;
+  tags: string[] | null;
 };
+
+type DisplayStatus =
+  | "active"
+  | "ended"
+  | "needs review"
+  | "completed"
+  | "discarded";
+
+function displayStatus(row: SessionRow): DisplayStatus {
+  if (row.status === "active") return "active";
+  if (row.review_state === "confirmed") return "completed";
+  if (row.review_state === "discarded") return "discarded";
+  if (row.review_state === "user_review") return "needs review";
+  return "ended";
+}
 
 export default async function Home() {
   const { rows } = await pool.query<SessionRow>(
     `SELECT s.id, s.username, s.status, s.started_at, s.ended_at,
-            a.result -> 'workflow' ->> 'title' AS workflow_title
+            a.result -> 'workflow' ->> 'title' AS workflow_title,
+            a.review_state,
+            s.tags
        FROM sessions s
        LEFT JOIN analysis a ON a.session_id = s.id
        ORDER BY s.started_at DESC
@@ -58,6 +80,7 @@ export default async function Home() {
                 <th style={th}>Ended</th>
                 <th style={th}>Duration</th>
                 <th style={th}>Status</th>
+                <th style={th}>Tags</th>
                 <th style={th}>Analysis</th>
               </tr>
             </thead>
@@ -85,7 +108,30 @@ export default async function Home() {
                     {formatDuration(row.started_at, row.ended_at)}
                   </td>
                   <td style={td}>
-                    <span style={statusPill(row.status)}>{row.status}</span>
+                    {(() => {
+                      const ds = displayStatus(row);
+                      return <span style={statusPill(ds)}>{ds}</span>;
+                    })()}
+                  </td>
+                  <td style={td}>
+                    {row.tags && row.tags.length > 0 ? (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: 4,
+                          maxWidth: 220,
+                        }}
+                      >
+                        {row.tags.map((t) => (
+                          <span key={t} style={tagPill}>
+                            {t}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span style={{ opacity: 0.35, fontSize: 12 }}>—</span>
+                    )}
                   </td>
                   <td style={td}>
                     {row.workflow_title ? (
@@ -124,17 +170,38 @@ const td: React.CSSProperties = {
   verticalAlign: "middle",
 };
 
-function statusPill(status: "active" | "ended"): React.CSSProperties {
+function statusPill(status: DisplayStatus): React.CSSProperties {
+  const palette: Record<DisplayStatus, { bg: string; fg: string }> = {
+    active: { bg: "#1b3a2b", fg: "#65d195" },
+    "needs review": { bg: "#3a2f17", fg: "#f0b86b" },
+    completed: { bg: "#13233a", fg: "#79b8ff" },
+    discarded: { bg: "#3a1f23", fg: "#e57a86" },
+    ended: { bg: "#23272d", fg: "#9aa4ad" },
+  };
+  const { bg, fg } = palette[status];
   return {
     display: "inline-block",
     padding: "2px 8px",
     borderRadius: 999,
     fontSize: 12,
     fontWeight: 500,
-    background: status === "active" ? "#1b3a2b" : "#23272d",
-    color: status === "active" ? "#65d195" : "#9aa4ad",
+    background: bg,
+    color: fg,
+    whiteSpace: "nowrap",
   };
 }
+
+const tagPill: React.CSSProperties = {
+  display: "inline-block",
+  padding: "1px 7px",
+  borderRadius: 999,
+  fontSize: 11,
+  fontWeight: 500,
+  background: "#13233a",
+  color: "#79b8ff",
+  border: "1px solid #2a4163",
+  whiteSpace: "nowrap",
+};
 
 const analysisPill: React.CSSProperties = {
   display: "inline-block",

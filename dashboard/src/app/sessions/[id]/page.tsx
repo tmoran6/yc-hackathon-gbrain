@@ -6,6 +6,8 @@ import { formatDuration, formatTimestamp } from "@/lib/format";
 import SessionViewer from "./SessionViewer";
 import AnalysisPanel, { type AnalyzerResult } from "./AnalysisPanel";
 import UserReviewPanel, { type AnalysisEdits } from "./UserReviewPanel";
+import TagsEditor from "./TagsEditor";
+import { suggestTags } from "@/lib/tags";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +17,7 @@ type SessionRow = {
   status: "active" | "ended";
   started_at: Date;
   ended_at: Date | null;
+  tags: string[] | null;
 };
 
 export default async function SessionPage({
@@ -25,7 +28,7 @@ export default async function SessionPage({
   const { id } = await params;
 
   const { rows } = await pool.query<SessionRow>(
-    `SELECT id, username, status, started_at, ended_at
+    `SELECT id, username, status, started_at, ended_at, tags
        FROM sessions
        WHERE id = $1`,
     [id],
@@ -113,6 +116,12 @@ export default async function SessionPage({
           />
         </div>
       </header>
+
+      <TagsEditor
+        sessionId={session.id}
+        initialTags={session.tags ?? []}
+        autoSuggestions={suggestTags({ workflow: analysis?.result?.workflow })}
+      />
 
       {analysis && analysis.review_state === "user_review" ? (
         <UserReviewPanel
