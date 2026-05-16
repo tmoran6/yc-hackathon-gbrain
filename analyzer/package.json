@@ -7,7 +7,9 @@
   "scripts": {
     "analyze": "node --experimental-strip-types analyze.ts",
     "latest": "node --experimental-strip-types analyze.ts",
-    "watch": "node --experimental-strip-types analyze.ts --watch"
+    "watch": "node --experimental-strip-types analyze.ts --watch",
+    "skill-page": "node --experimental-strip-types to-skill-page.ts",
+    "test": "node --experimental-strip-types --test to-skill-page.test.ts"
   },
   "engines": {
     "node": ">=22.6.0"

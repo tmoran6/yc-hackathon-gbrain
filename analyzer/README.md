@@ -118,3 +118,31 @@ skipped.
   }
 }
 ```
+
+## Skill pages
+
+`to-skill-page.ts` turns an analyzer output JSON into a GBrain skill page —
+the markdown format the `brain/` knowledge base uses (compiled truth above the
+`---`, append-only timeline below it; see `brain/README.md`).
+
+```bash
+# print to stdout
+npm run skill-page -- out/session_xyz.analysis.json
+
+# write a page file (drop it into brain/projects/)
+npm run skill-page -- out/session_xyz.analysis.json --out ../brain/projects/daily-opening.md
+```
+
+The compiled-truth section carries the synthesized `workflow` (trigger, apps,
+inputs, procedure, decision points, exceptions, suggested automations). The
+timeline section records the capture event: the source session, per-chunk
+observed steps, and any clarifying questions raised for the operator.
+
+Self-test (renders the committed fixture and checks every section):
+
+```bash
+npm test
+```
+
+Fixtures live in `fixtures/`: `analyzer-output.json` (sample input) and
+`skill-page.md` (the rendered page).

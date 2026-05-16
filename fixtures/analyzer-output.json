@@ -1,0 +1,128 @@
+{
+  "generated_at": "2026-05-16T11-53-52.000Z",
+  "model": "gemini-2.5-flash",
+  "session": "session_2026-05-16_11-53-52",
+  "session_path": "/Users/maria/Movies/ScreenRecorder/session_2026-05-16_11-53-52",
+  "duration_sec": 44.6,
+  "chunk_seconds": 15,
+  "frame_count": 89,
+  "audio": {
+    "available": true,
+    "summary": "Maria walks through her morning routine, checking yesterday's sales and ordering produce before service."
+  },
+  "steps": [
+    {
+      "chunk": 0,
+      "start_sec": 0,
+      "end_sec": 14.9,
+      "frame_count": 30,
+      "sampled_frames": ["frame_0001.png", "frame_0010.png", "frame_0020.png", "frame_0030.png"],
+      "audio_excerpt": "First thing I do is pull up yesterday's numbers.",
+      "analysis": {
+        "primary_app": "Toast POS",
+        "apps": ["Toast POS", "Google Chrome"],
+        "action": "Reviewing yesterday's sales by menu item",
+        "intent": "Understand what sold so prep can be planned",
+        "step_by_step": [
+          "Opened the Toast POS dashboard",
+          "Selected yesterday's date range",
+          "Sorted the sales report by quantity sold"
+        ],
+        "ui_elements": ["Date picker", "Sales report table", "Sort header"],
+        "confidence": 0.86
+      }
+    },
+    {
+      "chunk": 1,
+      "start_sec": 15,
+      "end_sec": 29.8,
+      "frame_count": 29,
+      "sampled_frames": ["frame_0031.png", "frame_0040.png", "frame_0050.png", "frame_0059.png"],
+      "audio_excerpt": "Then I check what we're low on before I order.",
+      "analysis": {
+        "primary_app": "Google Sheets",
+        "apps": ["Google Sheets"],
+        "action": "Comparing top sellers against the inventory sheet",
+        "intent": "Identify ingredients running low",
+        "step_by_step": [
+          "Opened the inventory tracking spreadsheet",
+          "Cross-referenced best-selling dishes with stock counts",
+          "Highlighted ingredients below the reorder threshold"
+        ],
+        "ui_elements": ["Spreadsheet rows", "Conditional formatting"],
+        "confidence": 0.79
+      }
+    },
+    {
+      "chunk": 2,
+      "start_sec": 30,
+      "end_sec": 44.6,
+      "frame_count": 30,
+      "sampled_frames": ["frame_0060.png", "frame_0070.png", "frame_0080.png", "frame_0089.png"],
+      "audio_excerpt": "I place the produce order and message the kitchen.",
+      "analysis": {
+        "primary_app": "Supplier Portal",
+        "apps": ["Supplier Portal", "WhatsApp"],
+        "action": "Placing a produce order and notifying kitchen staff",
+        "intent": "Restock low ingredients and brief the team",
+        "step_by_step": [
+          "Logged into the produce supplier portal",
+          "Added low-stock items to the cart",
+          "Submitted the order",
+          "Sent the prep list to the kitchen WhatsApp group"
+        ],
+        "ui_elements": ["Cart", "Submit order button", "Chat composer"],
+        "confidence": 0.83
+      }
+    }
+  ],
+  "workflow": {
+    "title": "Daily Opening Routine",
+    "trigger": "Start of the business day, before lunch service prep begins",
+    "apps_involved": ["Toast POS", "Google Sheets", "Supplier Portal", "WhatsApp"],
+    "required_inputs": [
+      "Yesterday's sales report",
+      "Current inventory spreadsheet",
+      "Supplier portal credentials"
+    ],
+    "procedure": [
+      "Open the POS dashboard and review yesterday's sales by item",
+      "Compare top-selling dishes against the inventory spreadsheet",
+      "Identify ingredients below the reorder threshold",
+      "Log into the supplier portal and add low-stock items to the cart",
+      "Submit the produce order",
+      "Send the prep list to the kitchen staff chat"
+    ],
+    "decision_points": [
+      "If an ingredient is above its reorder threshold, skip it from the order",
+      "If a top seller is at risk of selling out, flag it as a menu availability concern"
+    ],
+    "exceptions": [
+      "Supplier portal is down — fall back to phoning the order in",
+      "An item is out of stock at the supplier — pick a substitute or alert the chef"
+    ],
+    "suggested_automations": [
+      "Sales Summary Agent — pulls and summarizes yesterday's POS sales",
+      "Inventory Gap Agent — flags ingredients below threshold",
+      "Supplier Ordering Agent — drafts the produce cart for approval",
+      "Staff Briefing Agent — posts the prep list to the kitchen chat"
+    ]
+  },
+  "clarifying_questions": [
+    {
+      "id": "reorder-threshold",
+      "question": "How do you decide an ingredient is low enough to reorder?",
+      "why": "Pins down the exact rule the Inventory Gap Agent should apply."
+    },
+    {
+      "id": "order-approval",
+      "question": "Should the supplier order be submitted automatically or wait for your approval?",
+      "why": "Determines whether the Supplier Ordering Agent acts or only drafts."
+    },
+    {
+      "id": "handoff-target",
+      "question": "Who on the kitchen team needs the prep list, and on which channel?",
+      "why": "Defines where the Staff Briefing Agent should post."
+    }
+  ]
+}
