@@ -112,6 +112,35 @@ final class ScreenRecorder {
         onStateChange?()
     }
 
+    /// Discard the recording: stop capture, delete the remote session + its
+    /// uploaded screenshots, and remove the local folder. Nothing reaches the
+    /// analyzer or dashboard.
+    func discard() {
+        guard isRecording else { return }
+        timer?.invalidate()
+        timer = nil
+        isRecording = false
+        if audioEnabled {
+            audioRecorder.stop()
+        }
+        audioEnabled = false
+        let dir = sessionDir
+        sessionDir = nil
+        let uploader = self.uploader
+        Task {
+            await uploader.discard()
+            if let dir = dir {
+                do {
+                    try FileManager.default.removeItem(at: dir)
+                    NSLog("ScreenRecorder: discarded \(dir.path)")
+                } catch {
+                    NSLog("ScreenRecorder: failed to remove \(dir.path): \(error)")
+                }
+            }
+        }
+        onStateChange?()
+    }
+
     private func captureFrame() {
         guard let dir = sessionDir, !inFlight else { return }
         inFlight = true

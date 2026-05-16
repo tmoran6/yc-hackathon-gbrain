@@ -83,6 +83,14 @@ final class StatusBarController: NSObject {
                 )
                 audioStatus.isEnabled = false
                 menu.addItem(audioStatus)
+
+                let discard = NSMenuItem(
+                    title: "Discard Recording",
+                    action: #selector(discardRecording),
+                    keyEquivalent: ""
+                )
+                discard.target = self
+                menu.addItem(discard)
             } else {
                 let withAudio = NSMenuItem(
                     title: "Start Recording (with audio)",
@@ -157,6 +165,23 @@ final class StatusBarController: NSObject {
 
     @objc private func stopRecording() {
         recorder.stop()
+    }
+
+    @objc private func discardRecording() {
+        let alert = NSAlert()
+        alert.messageText = "Discard this recording?"
+        alert.informativeText =
+            "Deletes the local frames and removes the session plus any "
+            + "uploaded screenshots. This can't be undone."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Discard")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate(ignoringOtherApps: true)
+        // First button ("Discard"); rawValue 1000 == .alertFirstButtonResponse.
+        let firstButton = NSApplication.ModalResponse(rawValue: 1000)
+        if alert.runModal() == firstButton {
+            recorder.discard()
+        }
     }
 
     @objc private func openRecordingsFolder() {
