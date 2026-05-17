@@ -236,7 +236,10 @@ export default function DemoPage() {
   }
 
   function advanceStage(from: number) {
-    setCurrentStage(from + 1);
+    // Stages 1-4 advance one at a time via Continue. Stage 4's Continue
+    // unlocks BOTH stage 5 (Ask) and stage 6 (Run the Skill) — neither has
+    // a Continue button of its own.
+    setCurrentStage(from === 4 ? 6 : from + 1);
   }
 
   const isActive = (n: number) => currentStage === n;
