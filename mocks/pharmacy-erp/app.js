@@ -2972,3 +2972,228 @@ $$('.tree-folder, .tree-root').forEach(node => {
 router.go('dashboard');
 refreshStatusBar();
 log('LOGIN', 'Session started');
+
+// ============================================================
+// GBRAIN SKILL RUNNER — postMessage bridge
+// Listens for {type:'gbrain-run-step', step:N} messages from the
+// parent dashboard and performs the corresponding ERP action.
+// After completion posts {type:'gbrain-step-done', step:N} back.
+// ============================================================
+
+// Sample patient data used for the demo run
+const GBRAIN_PATIENT = {
+  last:          'Gonzalez',
+  first:         'Maria',
+  dob:           '1990-03-15',
+  sex:           'F',
+  phone:         '5147823901',
+  email:         'maria.gonzalez@example.com',
+  addr:          '1842 Rue Principale, Montreal, QC',
+  allergies:     'Penicillin',
+  insurancePlan: 'BlueCross Shield Plus',
+  insuranceGroup:'GRP-4412',
+  copay:         '$20',
+  notes:         'Walk-in patient, first vaccine visit',
+};
+
+// Id of the newly created patient (set after step 0 navigates to patient-new)
+let _gbrainPatientId = null;
+
+// Helper: set a form field value in the current page by input[name]
+function _gbrainSetField(name, value) {
+  const el = document.querySelector(`[name="${name}"]`);
+  if (!el) return false;
+  if (el.tagName === 'SELECT') {
+    for (const opt of el.options) {
+      if (opt.value === value || opt.text === value) { opt.selected = true; break; }
+    }
+  } else if (el.type === 'checkbox') {
+    el.checked = !!value;
+  } else {
+    el.value = value;
+  }
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  return true;
+}
+
+// Helper: highlight a field briefly so the observer can see which field was touched
+function _gbrainHighlight(name) {
+  const el = document.querySelector(`[name="${name}"]`);
+  if (!el) return;
+  const prev = el.style.outline;
+  el.style.outline = '2.5px solid #79b8ff';
+  el.style.transition = 'outline 0.3s';
+  setTimeout(() => { el.style.outline = prev; }, 1200);
+}
+
+// The 19-step action map
+const GBRAIN_STEPS = [
+  // 0: Navigate to 'New Patient' under 'Patient Records'
+  function step0() {
+    // Reset any previously created demo patient so the demo is repeatable
+    state.patients = state.patients.filter(p => p.id !== _gbrainPatientId);
+    state.appointments = state.appointments.filter(a => a.patientId !== _gbrainPatientId);
+    _gbrainPatientId = null;
+    router.go('patient-new');
+  },
+  // 1: Enter Last Name
+  function step1() {
+    _gbrainSetField('last', GBRAIN_PATIENT.last);
+    _gbrainHighlight('last');
+  },
+  // 2: Enter First Name
+  function step2() {
+    _gbrainSetField('first', GBRAIN_PATIENT.first);
+    _gbrainHighlight('first');
+  },
+  // 3: Enter Date of Birth
+  function step3() {
+    _gbrainSetField('dob', GBRAIN_PATIENT.dob);
+    _gbrainHighlight('dob');
+  },
+  // 4: Select Sex
+  function step4() {
+    _gbrainSetField('sex', GBRAIN_PATIENT.sex);
+    _gbrainHighlight('sex');
+  },
+  // 5: Enter Phone Number
+  function step5() {
+    _gbrainSetField('phone', GBRAIN_PATIENT.phone);
+    _gbrainHighlight('phone');
+  },
+  // 6: Enter Email
+  function step6() {
+    _gbrainSetField('email', GBRAIN_PATIENT.email);
+    _gbrainHighlight('email');
+  },
+  // 7: Enter Address
+  function step7() {
+    _gbrainSetField('addr', GBRAIN_PATIENT.addr);
+    _gbrainHighlight('addr');
+  },
+  // 8: Enter Allergies
+  function step8() {
+    _gbrainSetField('allergies', GBRAIN_PATIENT.allergies);
+    _gbrainHighlight('allergies');
+  },
+  // 9: Enter Insurance Plan
+  function step9() {
+    _gbrainSetField('insurancePlan', GBRAIN_PATIENT.insurancePlan);
+    _gbrainHighlight('insurancePlan');
+  },
+  // 10: Enter Insurance Group
+  function step10() {
+    _gbrainSetField('insuranceGroup', GBRAIN_PATIENT.insuranceGroup);
+    _gbrainHighlight('insuranceGroup');
+  },
+  // 11: Enter general patient Notes
+  function step11() {
+    _gbrainSetField('notes', GBRAIN_PATIENT.notes);
+    _gbrainHighlight('notes');
+  },
+  // 12: Enter Copay amount — then submit the form to save the patient
+  function step12() {
+    _gbrainSetField('copay', GBRAIN_PATIENT.copay);
+    _gbrainHighlight('copay');
+    // Submit the patient form after a short visual pause
+    setTimeout(() => {
+      const form = document.querySelector('#patient-form');
+      if (form) {
+        // Intercept the router navigation so we can capture the new patient id
+        const origGo = router.go;
+        router.go = function(route, params) {
+          if (route === 'patient-profile' && params && params.id) {
+            _gbrainPatientId = params.id;
+          }
+          router.go = origGo; // restore
+          origGo.call(router, route, params);
+        };
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      }
+    }, 400);
+  },
+  // 13: Navigate to 'Vaccine Booking' under 'Appointments'
+  function step13() {
+    router.go('appointments-vaccine');
+  },
+  // 14: Select Vaccine Type (COVID-19 Vaccine 2025, id M017)
+  function step14() {
+    _gbrainSetField('medId', 'M017');
+    _gbrainHighlight('medId');
+  },
+  // 15: Enter Notes for the vaccine appointment
+  function step15() {
+    _gbrainSetField('notes', 'Patient has no prior COVID vaccine on record. Consent obtained.');
+    _gbrainHighlight('notes');
+  },
+  // 16: Open / focus the Available Slots dropdown (visual affordance)
+  function step16() {
+    const el = document.querySelector('[name="time"]');
+    if (el) { el.focus(); el.size = Math.min(el.options.length, 8); }
+    _gbrainHighlight('time');
+  },
+  // 17: Select the first available time slot
+  function step17() {
+    const el = document.querySelector('[name="time"]');
+    if (el) {
+      el.size = 1;
+      for (const opt of el.options) {
+        if (!opt.disabled && opt.value) { opt.selected = true; break; }
+      }
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      _gbrainHighlight('time');
+    }
+  },
+  // 18: Book the appointment — click the submit button
+  function step18() {
+    // Make sure consent checkbox is checked
+    _gbrainSetField('consent', true);
+    // If we captured the patient id, pre-select them in the dropdown
+    if (_gbrainPatientId) {
+      _gbrainSetField('patientId', _gbrainPatientId);
+    }
+    setTimeout(() => {
+      const form = document.querySelector('#vax-form');
+      if (form) form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    }, 300);
+  },
+];
+
+window.addEventListener('message', function(event) {
+  const data = event.data;
+  if (!data || typeof data !== 'object') return;
+
+  if (data.type === 'gbrain-reset') {
+    // Clean up demo patient/appointments and return to dashboard
+    if (_gbrainPatientId) {
+      state.patients = state.patients.filter(p => p.id !== _gbrainPatientId);
+      state.appointments = state.appointments.filter(a => a.patientId !== _gbrainPatientId);
+      saveState();
+      _gbrainPatientId = null;
+    }
+    router.go('dashboard');
+    toast('GBrain reset. Ready to run workflow.', 'info');
+    event.source.postMessage({ type: 'gbrain-reset-done' }, '*');
+    return;
+  }
+
+  if (data.type === 'gbrain-run-step') {
+    const step = data.step;
+    if (step < 0 || step >= GBRAIN_STEPS.length) {
+      console.warn('gbrain-run-step: unknown step', step);
+      return;
+    }
+    try {
+      GBRAIN_STEPS[step]();
+    } catch (err) {
+      console.error('gbrain-run-step error at step', step, err);
+    }
+    // Post acknowledgement after a small delay to allow DOM updates to settle
+    setTimeout(() => {
+      if (event.source) {
+        event.source.postMessage({ type: 'gbrain-step-done', step }, '*');
+      }
+    }, 600);
+  }
+});

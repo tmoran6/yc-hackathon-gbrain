@@ -6,6 +6,8 @@ import { CommitButton } from "@/components/CommitButton";
 import { BrainChat } from "@/components/BrainChat";
 import { ScreenRecordingStage } from "@/components/ScreenRecordingStage";
 import { AIAnalysisStage } from "@/components/AIAnalysisStage";
+import { SkillRunner } from "@/components/SkillRunner";
+import { EyeMark } from "@/components/EyeMark";
 import { skillPage } from "@/fixtures/skill-page";
 import { analyzerOutput } from "@/fixtures/analyzer-output";
 
@@ -28,6 +30,7 @@ const STAGE_DELAYS: Record<number, number> = {
   3: 0,     // Skill Captured — shown immediately after analysis
   4: 0,     // Commit — shown immediately
   5: 0,     // Ask — shown immediately
+  6: 0,     // Run the Skill — shown immediately
 };
 
 const PIPELINE_STAGES = [
@@ -36,6 +39,7 @@ const PIPELINE_STAGES = [
   { n: 3, label: "Skill Captured", color: colors.green, dot: "#2a6a45" },
   { n: 4, label: "Commit to Brain", color: colors.amber, dot: "#7a5820" },
   { n: 5, label: "Ask your Brain", color: colors.green, dot: "#2a6a45" },
+  { n: 6, label: "Run the Skill", color: colors.amber, dot: "#7a5820" },
 ];
 
 function PipelinePill({
@@ -215,9 +219,9 @@ export default function DemoPage() {
 
     // Schedule stage unlocks
     let cumulative = 0;
-    [1, 2, 3, 4, 5].forEach((stageNum) => {
+    [1, 2, 3, 4, 5, 6].forEach((stageNum) => {
       cumulative += STAGE_DELAYS[stageNum] ?? 0;
-      if (stageNum < 5) {
+      if (stageNum < 6) {
         const t = setTimeout(() => {
           setCurrentStage(stageNum + 1);
         }, cumulative);
@@ -239,9 +243,19 @@ export default function DemoPage() {
       style={{
         maxWidth: 860,
         margin: "0 auto",
-        padding: "2rem 0 4rem",
+        padding: "2rem 1rem 4rem",
+        position: "relative",
       }}
     >
+      {/* Force dark backdrop regardless of prefers-color-scheme */}
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "#0b0d10",
+          zIndex: -1,
+        }}
+      />
       {/* Hero */}
       <div style={{ marginBottom: "2.5rem" }}>
         <div
@@ -297,15 +311,16 @@ export default function DemoPage() {
             letterSpacing: -0.5,
           }}
         >
-          We built the{" "}
           <span
             style={{
-              background: "linear-gradient(90deg, #79b8ff 0%, #65d195 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 16,
+              flexWrap: "wrap",
             }}
           >
-            Eyes.
+            We built the
+            <EyeMark size={58} />
           </span>
         </h1>
 
@@ -561,6 +576,38 @@ export default function DemoPage() {
         {isUnlocked(5) ? (
           <div style={{ animation: "fadeSlideUp 0.5s ease" }}>
             <BrainChat />
+          </div>
+        ) : (
+          <LockedOverlay />
+        )}
+      </section>
+
+      {/* Stage 6: Run the Skill */}
+      <section style={{ marginBottom: "2rem" }}>
+        <SectionHeader
+          n={6}
+          label="Run the Skill"
+          active={isActive(6)}
+          complete={isComplete(6)}
+          color={colors.amber}
+        />
+        <p
+          style={{
+            margin: "0 0 1rem 38px",
+            fontSize: 13,
+            color: isUnlocked(6) ? colors.textDim : "#3a3f4a",
+            lineHeight: 1.6,
+            transition: "color 0.4s",
+          }}
+        >
+          The brain doesn&apos;t just answer — it does the work. Click{" "}
+          <strong style={{ color: colors.text }}>Next Step</strong> and watch
+          the pharmacy ERP actually execute each step of the captured workflow,
+          hands-free.
+        </p>
+        {isUnlocked(6) ? (
+          <div style={{ animation: "fadeSlideUp 0.5s ease" }}>
+            <SkillRunner />
           </div>
         ) : (
           <LockedOverlay />
