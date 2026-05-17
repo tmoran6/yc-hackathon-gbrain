@@ -12,6 +12,7 @@ const colors = {
   blue: "#79b8ff",
   green: "#65d195",
   amber: "#f0b050",
+  red: "#ff7b7b",
   border: "#1f242b",
   surface: "#11151a",
   bg: "#0c0f14",
@@ -19,12 +20,76 @@ const colors = {
 
 const ERP_ORIGIN = "http://localhost:5002";
 
+// ---- CSV types ----
+interface Patient {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  dob: string;
+  schedule_datetime: string;
+}
+
+type PatientStatus = "pending" | "processing" | "done" | "error";
+
+interface PatientRow extends Patient {
+  status: PatientStatus;
+  stepsDone: number; // 0-19
+}
+
+// ---- Simple CSV parser ----
+function parseCsv(text: string): Patient[] {
+  const lines = text.trim().split("\n");
+  const headers = lines[0].split(",").map((h) => h.trim());
+  return lines.slice(1).map((line) => {
+    const vals = line.split(",").map((v) => v.trim());
+    const obj: Record<string, string> = {};
+    headers.forEach((h, i) => { obj[h] = vals[i] ?? ""; });
+    return obj as unknown as Patient;
+  });
+}
+
+// ---- Step delay between each step in batch mode (ms) ----
+const STEP_DELAY_MS = 700;
+// Delay between patients (ms)
+const PATIENT_DELAY_MS = 1200;
+
 export function SkillRunner() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [currentStep, setCurrentStep] = useState(-1); // -1 = not started
-  const [waitingForAck, setWaitingForAck] = useState(false);
-  const [complete, setComplete] = useState(false);
   const [iframeReady, setIframeReady] = useState(false);
+
+  // Patient list state
+  const [patients, setPatients] = useState<PatientRow[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Batch runner state
+  const [running, setRunning] = useState(false);
+  const [done, setDone] = useState(false);
+  const [currentPatientIdx, setCurrentPatientIdx] = useState(-1);
+  const [currentStepLabel, setCurrentStepLabel] = useState("");
+
+  // Refs for communicating with the iframe mid-run
+  const stepAckRef = useRef<((step: number) => void) | null>(null);
+  const resetAckRef = useRef<(() => void) | null>(null);
+  const abortRef = useRef(false);
+
+  // Load CSV on mount
+  useEffect(() => {
+    fetch("/patients-to-schedule.csv")
+      .then((r) => r.text())
+      .then((text) => {
+        const parsed = parseCsv(text);
+        setPatients(
+          parsed.map((p) => ({ ...p, status: "pending", stepsDone: 0 }))
+        );
+        setLoading(false);
+      })
+      .catch((err) => {
+        setLoadError(String(err));
+        setLoading(false);
+      });
+  }, []);
 
   // Listen for postMessage replies from the ERP iframe
   useEffect(() => {
@@ -32,62 +97,146 @@ export function SkillRunner() {
       if (!ev.data || typeof ev.data !== "object") return;
 
       if (ev.data.type === "gbrain-step-done") {
-        const acknowledgedStep: number = ev.data.step;
-        setWaitingForAck(false);
-        const nextStep = acknowledgedStep + 1;
-        if (nextStep >= STEPS.length) {
-          setComplete(true);
-          setCurrentStep(STEPS.length); // all done
-        } else {
-          setCurrentStep(nextStep - 1); // mark that step as completed; "next" starts at nextStep
-        }
+        stepAckRef.current?.(ev.data.step);
       }
-
       if (ev.data.type === "gbrain-reset-done") {
-        setCurrentStep(-1);
-        setWaitingForAck(false);
-        setComplete(false);
+        resetAckRef.current?.();
       }
     }
-
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
   }, []);
 
-  const postToErp = useCallback(
-    (msg: object) => {
-      iframeRef.current?.contentWindow?.postMessage(msg, ERP_ORIGIN);
-    },
-    []
-  );
+  const postToErp = useCallback((msg: object) => {
+    iframeRef.current?.contentWindow?.postMessage(msg, ERP_ORIGIN);
+  }, []);
 
-  function handleNextStep() {
-    if (waitingForAck || complete) return;
-    const stepToRun = currentStep + 1; // 0-indexed step to execute
-    setWaitingForAck(true);
-    // Optimistically mark the step as "in progress" visually
-    setCurrentStep(stepToRun - 1); // show up to previous as done
-    postToErp({ type: "gbrain-run-step", step: stepToRun });
+  // Promisified: send a step and wait for gbrain-step-done
+  function runStep(step: number, patient: Patient): Promise<void> {
+    return new Promise((resolve) => {
+      stepAckRef.current = (ack) => {
+        if (ack === step) {
+          stepAckRef.current = null;
+          resolve();
+        }
+      };
+      postToErp({ type: "gbrain-run-step", step, patient });
+    });
+  }
+
+  // Promisified: send gbrain-reset and wait for gbrain-reset-done
+  function resetErp(): Promise<void> {
+    return new Promise((resolve) => {
+      resetAckRef.current = () => {
+        resetAckRef.current = null;
+        resolve();
+      };
+      postToErp({ type: "gbrain-reset" });
+    });
+  }
+
+  function sleep(ms: number) {
+    return new Promise<void>((r) => setTimeout(r, ms));
+  }
+
+  async function runAll() {
+    if (running || done) return;
+    abortRef.current = false;
+    setRunning(true);
+
+    for (let pi = 0; pi < patients.length; pi++) {
+      if (abortRef.current) break;
+
+      const patient = patients[pi];
+
+      // Reset ERP between patients (also resets on first patient)
+      await resetErp();
+      await sleep(400);
+
+      setCurrentPatientIdx(pi);
+      setPatients((prev) =>
+        prev.map((row, i) =>
+          i === pi ? { ...row, status: "processing", stepsDone: 0 } : row
+        )
+      );
+
+      // Run all 19 steps
+      for (let step = 0; step < STEPS.length; step++) {
+        if (abortRef.current) break;
+        setCurrentStepLabel(STEPS[step]);
+        setPatients((prev) =>
+          prev.map((row, i) =>
+            i === pi ? { ...row, stepsDone: step } : row
+          )
+        );
+        try {
+          await runStep(step, patient);
+        } catch {
+          setPatients((prev) =>
+            prev.map((row, i) =>
+              i === pi ? { ...row, status: "error" } : row
+            )
+          );
+          break;
+        }
+        await sleep(STEP_DELAY_MS);
+      }
+
+      if (!abortRef.current) {
+        setPatients((prev) =>
+          prev.map((row, i) =>
+            i === pi ? { ...row, status: "done", stepsDone: STEPS.length } : row
+          )
+        );
+      }
+
+      // Pause between patients
+      if (pi < patients.length - 1) {
+        await sleep(PATIENT_DELAY_MS);
+      }
+    }
+
+    setRunning(false);
+    if (!abortRef.current) {
+      setDone(true);
+      setCurrentPatientIdx(-1);
+      setCurrentStepLabel("");
+    }
   }
 
   function handleReset() {
+    abortRef.current = true;
+    setRunning(false);
+    setDone(false);
+    setCurrentPatientIdx(-1);
+    setCurrentStepLabel("");
+    setPatients((prev) => prev.map((p) => ({ ...p, status: "pending", stepsDone: 0 })));
     postToErp({ type: "gbrain-reset" });
   }
 
-  const isStepDone = (i: number) => i < currentStep + 1;
-  const isStepActive = (i: number) => i === currentStep + 1 && waitingForAck;
-  const nextStepIdx = currentStep + 1; // the next step that will run
+  const statusIcon = (s: PatientStatus, stepsDone: number, idx: number) => {
+    if (s === "done") return <span style={{ color: colors.green, fontWeight: 700 }}>✓</span>;
+    if (s === "error") return <span style={{ color: colors.red }}>✗</span>;
+    if (s === "processing") {
+      return (
+        <span style={{ color: colors.blue, fontSize: 11 }}>
+          {stepsDone}/{STEPS.length}
+        </span>
+      );
+    }
+    return <span style={{ color: colors.textDim, fontSize: 11 }}>{idx + 1}</span>;
+  };
 
   return (
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "280px 1fr",
+        gridTemplateColumns: "320px 1fr",
         gap: 16,
         alignItems: "start",
       }}
     >
-      {/* Left panel: checklist + controls */}
+      {/* Left panel: patient list + controls */}
       <div
         style={{
           background: colors.bg,
@@ -109,115 +258,196 @@ export function SkillRunner() {
             color: colors.muted,
             borderBottom: `1px solid ${colors.border}`,
             paddingBottom: 8,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
           }}
         >
-          Workflow Steps
+          <span>Patients to Schedule</span>
+          {!loading && !loadError && (
+            <span
+              style={{
+                fontSize: 10,
+                padding: "1px 7px",
+                borderRadius: 999,
+                background: "rgba(121,184,255,0.1)",
+                border: "1px solid rgba(121,184,255,0.25)",
+                color: colors.blue,
+              }}
+            >
+              {patients.length} patients
+            </span>
+          )}
         </div>
 
-        {/* Step checklist */}
-        <ol
-          style={{
-            margin: 0,
-            padding: 0,
-            listStyle: "none",
-            display: "flex",
-            flexDirection: "column",
-            gap: 6,
-          }}
-        >
-          {STEPS.map((step, i) => {
-            const done = isStepDone(i);
-            const active = isStepActive(i);
-            return (
-              <li
-                key={i}
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: 8,
-                  fontSize: 12,
-                  lineHeight: 1.4,
-                  color: done
-                    ? colors.green
-                    : active
-                    ? colors.blue
-                    : i === nextStepIdx
-                    ? colors.text
-                    : colors.textDim,
-                  transition: "color 0.3s",
-                  fontWeight: active || i === nextStepIdx ? 600 : 400,
-                }}
-              >
-                {/* Step indicator */}
-                <span
+        {/* Patient list */}
+        {loading && (
+          <div style={{ fontSize: 12, color: colors.textDim, textAlign: "center", padding: "12px 0" }}>
+            Loading patients…
+          </div>
+        )}
+        {loadError && (
+          <div style={{ fontSize: 12, color: colors.red }}>
+            Failed to load CSV: {loadError}
+          </div>
+        )}
+        {!loading && !loadError && (
+          <ol
+            style={{
+              margin: 0,
+              padding: 0,
+              listStyle: "none",
+              display: "flex",
+              flexDirection: "column",
+              gap: 5,
+              maxHeight: 340,
+              overflowY: "auto",
+            }}
+          >
+            {patients.map((p, i) => {
+              const isActive = i === currentPatientIdx && running;
+              return (
+                <li
+                  key={i}
                   style={{
-                    flexShrink: 0,
-                    width: 18,
-                    height: 18,
-                    borderRadius: "50%",
                     display: "flex",
                     alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: 10,
-                    fontWeight: 700,
-                    background: done
-                      ? "rgba(101,209,149,0.18)"
-                      : active
-                      ? "rgba(121,184,255,0.18)"
+                    gap: 8,
+                    padding: "6px 8px",
+                    borderRadius: 6,
+                    background: isActive
+                      ? "rgba(121,184,255,0.08)"
+                      : p.status === "done"
+                      ? "rgba(101,209,149,0.06)"
                       : "transparent",
-                    border: `1.5px solid ${
-                      done
-                        ? colors.green
-                        : active
-                        ? colors.blue
-                        : colors.border
+                    border: `1px solid ${
+                      isActive
+                        ? "rgba(121,184,255,0.25)"
+                        : p.status === "done"
+                        ? "rgba(101,209,149,0.2)"
+                        : "transparent"
                     }`,
-                    color: done ? colors.green : active ? colors.blue : colors.textDim,
                     transition: "all 0.3s",
                   }}
                 >
-                  {done ? "✓" : active ? "…" : i + 1}
-                </span>
-                <span style={{ paddingTop: 1 }}>{step}</span>
-              </li>
-            );
-          })}
-        </ol>
+                  {/* Status badge */}
+                  <span
+                    style={{
+                      flexShrink: 0,
+                      width: 26,
+                      height: 22,
+                      borderRadius: 4,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      background:
+                        p.status === "done"
+                          ? "rgba(101,209,149,0.15)"
+                          : isActive
+                          ? "rgba(121,184,255,0.15)"
+                          : "rgba(255,255,255,0.04)",
+                      border: `1px solid ${
+                        p.status === "done"
+                          ? colors.green
+                          : isActive
+                          ? colors.blue
+                          : colors.border
+                      }`,
+                    }}
+                  >
+                    {statusIcon(p.status, p.stepsDone, i)}
+                  </span>
+
+                  {/* Name + date */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: isActive ? 700 : 500,
+                        color:
+                          p.status === "done"
+                            ? colors.green
+                            : isActive
+                            ? colors.text
+                            : colors.muted,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        transition: "color 0.3s",
+                      }}
+                    >
+                      {p.first_name} {p.last_name}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: colors.textDim,
+                        marginTop: 1,
+                      }}
+                    >
+                      {p.schedule_datetime}
+                    </div>
+                  </div>
+
+                  {/* Processing indicator */}
+                  {isActive && (
+                    <span
+                      style={{
+                        display: "inline-block",
+                        fontSize: 13,
+                        color: colors.blue,
+                        animation: "spin 0.9s linear infinite",
+                        flexShrink: 0,
+                      }}
+                    >
+                      ⟳
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        )}
+
+        {/* Active step label */}
+        {running && currentStepLabel && (
+          <div
+            style={{
+              fontSize: 11,
+              color: colors.blue,
+              background: "rgba(121,184,255,0.07)",
+              border: "1px solid rgba(121,184,255,0.2)",
+              borderRadius: 6,
+              padding: "5px 8px",
+              lineHeight: 1.4,
+            }}
+          >
+            <span style={{ fontWeight: 700 }}>Running:</span> {currentStepLabel}
+          </div>
+        )}
 
         {/* Divider */}
         <div style={{ borderTop: `1px solid ${colors.border}` }} />
 
         {/* Controls */}
-        {complete ? (
+        {done ? (
           <div
             style={{
-              padding: "12px 10px",
+              padding: "14px 10px",
               borderRadius: 8,
               background: "rgba(101,209,149,0.08)",
-              border: `1px solid rgba(101,209,149,0.25)`,
+              border: "1px solid rgba(101,209,149,0.25)",
               textAlign: "center",
             }}
           >
-            <div style={{ fontSize: 20, marginBottom: 6 }}>✓</div>
-            <div
-              style={{
-                fontSize: 12,
-                fontWeight: 700,
-                color: colors.green,
-                lineHeight: 1.4,
-              }}
-            >
-              Workflow complete
+            <div style={{ fontSize: 22, marginBottom: 6 }}>✓</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: colors.green, lineHeight: 1.4 }}>
+              All {patients.length} patients registered &amp; vaccine appointments booked
             </div>
-            <div
-              style={{
-                fontSize: 11,
-                color: colors.muted,
-                marginTop: 4,
-                lineHeight: 1.4,
-              }}
-            >
-              Done by the brain, hands-free.
+            <div style={{ fontSize: 11, color: colors.muted, marginTop: 4, lineHeight: 1.4 }}>
+              Hands-free. No clicks required.
             </div>
             <button
               onClick={handleReset}
@@ -238,22 +468,24 @@ export function SkillRunner() {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <button
-              onClick={handleNextStep}
-              disabled={waitingForAck}
+              onClick={runAll}
+              disabled={running || loading || !!loadError}
               style={{
-                padding: "10px 0",
+                padding: "11px 0",
                 borderRadius: 8,
                 border: "none",
-                cursor: waitingForAck ? "not-allowed" : "pointer",
-                fontSize: 14,
+                cursor: running || loading || !!loadError ? "not-allowed" : "pointer",
+                fontSize: 13,
                 fontWeight: 700,
                 color: "#fff",
-                background: waitingForAck
-                  ? "#2a3040"
-                  : "linear-gradient(135deg, #3b6ea3 0%, #2a5078 100%)",
-                boxShadow: waitingForAck
-                  ? "none"
-                  : "0 2px 16px rgba(59,110,163,0.4)",
+                background:
+                  running || loading || !!loadError
+                    ? "#2a3040"
+                    : "linear-gradient(135deg, #3b6ea3 0%, #2a5078 100%)",
+                boxShadow:
+                  running || loading || !!loadError
+                    ? "none"
+                    : "0 2px 16px rgba(59,110,163,0.4)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -261,38 +493,19 @@ export function SkillRunner() {
                 transition: "all 0.2s",
               }}
             >
-              {waitingForAck ? (
+              {running ? (
                 <>
-                  <span
-                    style={{
-                      display: "inline-block",
-                      animation: "spin 0.9s linear infinite",
-                    }}
-                  >
+                  <span style={{ display: "inline-block", animation: "spin 0.9s linear infinite" }}>
                     ⟳
                   </span>
-                  Running…
+                  Processing patients…
                 </>
-              ) : currentStep === -1 ? (
-                <>▶ Start Workflow</>
               ) : (
-                <>
-                  ▶ Next Step
-                  <span
-                    style={{
-                      fontSize: 11,
-                      background: "rgba(255,255,255,0.15)",
-                      padding: "1px 6px",
-                      borderRadius: 4,
-                    }}
-                  >
-                    {nextStepIdx + 1}/{STEPS.length}
-                  </span>
-                </>
+                <>▶ Run skill for all {patients.length} patients</>
               )}
             </button>
 
-            {currentStep >= 0 && (
+            {running && (
               <button
                 onClick={handleReset}
                 style={{
@@ -305,11 +518,11 @@ export function SkillRunner() {
                   cursor: "pointer",
                 }}
               >
-                ⟲ Reset
+                ■ Stop
               </button>
             )}
 
-            {currentStep === -1 && (
+            {!running && (
               <p
                 style={{
                   margin: 0,
@@ -319,7 +532,7 @@ export function SkillRunner() {
                   lineHeight: 1.5,
                 }}
               >
-                Each click performs one step in the live ERP.
+                Automatically processes all {patients.length} patients through the ERP — no clicks needed.
               </p>
             )}
           </div>
@@ -357,6 +570,29 @@ export function SkillRunner() {
         >
           RxMaster ERP — live
         </div>
+        {/* Current patient badge */}
+        {running && currentPatientIdx >= 0 && (
+          <div
+            style={{
+              position: "absolute",
+              top: 8,
+              left: 10,
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: 0.4,
+              color: colors.blue,
+              background: "rgba(12,15,20,0.85)",
+              border: "1px solid rgba(121,184,255,0.3)",
+              padding: "3px 10px",
+              borderRadius: 4,
+              zIndex: 10,
+              pointerEvents: "none",
+              animation: "fadeIn 0.3s ease",
+            }}
+          >
+            Patient {currentPatientIdx + 1}/{patients.length} — {patients[currentPatientIdx]?.first_name} {patients[currentPatientIdx]?.last_name}
+          </div>
+        )}
         <iframe
           ref={iframeRef}
           src={ERP_ORIGIN}
@@ -383,12 +619,7 @@ export function SkillRunner() {
               gap: 8,
             }}
           >
-            <span
-              style={{
-                display: "inline-block",
-                animation: "spin 1s linear infinite",
-              }}
-            >
+            <span style={{ display: "inline-block", animation: "spin 1s linear infinite" }}>
               ⟳
             </span>
             Loading ERP…
@@ -398,6 +629,7 @@ export function SkillRunner() {
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
       `}</style>
     </div>
   );

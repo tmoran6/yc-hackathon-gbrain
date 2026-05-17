@@ -2980,8 +2980,8 @@ log('LOGIN', 'Session started');
 // After completion posts {type:'gbrain-step-done', step:N} back.
 // ============================================================
 
-// Sample patient data used for the demo run
-const GBRAIN_PATIENT = {
+// Fallback patient data (used when no patient is passed in the message)
+const GBRAIN_PATIENT_DEFAULT = {
   last:          'Gonzalez',
   first:         'Maria',
   dob:           '1990-03-15',
@@ -2996,8 +2996,32 @@ const GBRAIN_PATIENT = {
   notes:         'Walk-in patient, first vaccine visit',
 };
 
+// Current patient for this run (set per-run from gbrain-run-step message or default)
+// Shape: { last, first, dob, sex, phone, email, addr, allergies, insurancePlan, insuranceGroup, copay, notes }
+let _gbrainCurrentPatient = GBRAIN_PATIENT_DEFAULT;
+
 // Id of the newly created patient (set after step 0 navigates to patient-new)
 let _gbrainPatientId = null;
+
+// Map CSV patient fields to ERP form fields
+function _mapPatientFromMessage(p) {
+  if (!p) return GBRAIN_PATIENT_DEFAULT;
+  // Derive a display-friendly name from last_name / first_name (CSV columns)
+  return {
+    last:          p.last_name  || p.last  || GBRAIN_PATIENT_DEFAULT.last,
+    first:         p.first_name || p.first || GBRAIN_PATIENT_DEFAULT.first,
+    dob:           p.dob        || GBRAIN_PATIENT_DEFAULT.dob,
+    sex:           p.sex        || 'F',
+    phone:         (p.phone     || GBRAIN_PATIENT_DEFAULT.phone).replace(/\D/g, ''),
+    email:         p.email      || GBRAIN_PATIENT_DEFAULT.email,
+    addr:          p.addr       || '1842 Rue Principale, Montreal, QC',
+    allergies:     p.allergies  || 'None known',
+    insurancePlan: p.insurancePlan  || GBRAIN_PATIENT_DEFAULT.insurancePlan,
+    insuranceGroup:p.insuranceGroup || GBRAIN_PATIENT_DEFAULT.insuranceGroup,
+    copay:         p.copay      || '$20',
+    notes:         p.notes      || 'Batch-scheduled patient.',
+  };
+}
 
 // Helper: set a form field value in the current page by input[name]
 function _gbrainSetField(name, value) {
@@ -3039,62 +3063,62 @@ const GBRAIN_STEPS = [
   },
   // 1: Enter Last Name
   function step1() {
-    _gbrainSetField('last', GBRAIN_PATIENT.last);
+    _gbrainSetField('last', _gbrainCurrentPatient.last);
     _gbrainHighlight('last');
   },
   // 2: Enter First Name
   function step2() {
-    _gbrainSetField('first', GBRAIN_PATIENT.first);
+    _gbrainSetField('first', _gbrainCurrentPatient.first);
     _gbrainHighlight('first');
   },
   // 3: Enter Date of Birth
   function step3() {
-    _gbrainSetField('dob', GBRAIN_PATIENT.dob);
+    _gbrainSetField('dob', _gbrainCurrentPatient.dob);
     _gbrainHighlight('dob');
   },
   // 4: Select Sex
   function step4() {
-    _gbrainSetField('sex', GBRAIN_PATIENT.sex);
+    _gbrainSetField('sex', _gbrainCurrentPatient.sex);
     _gbrainHighlight('sex');
   },
   // 5: Enter Phone Number
   function step5() {
-    _gbrainSetField('phone', GBRAIN_PATIENT.phone);
+    _gbrainSetField('phone', _gbrainCurrentPatient.phone);
     _gbrainHighlight('phone');
   },
   // 6: Enter Email
   function step6() {
-    _gbrainSetField('email', GBRAIN_PATIENT.email);
+    _gbrainSetField('email', _gbrainCurrentPatient.email);
     _gbrainHighlight('email');
   },
   // 7: Enter Address
   function step7() {
-    _gbrainSetField('addr', GBRAIN_PATIENT.addr);
+    _gbrainSetField('addr', _gbrainCurrentPatient.addr);
     _gbrainHighlight('addr');
   },
   // 8: Enter Allergies
   function step8() {
-    _gbrainSetField('allergies', GBRAIN_PATIENT.allergies);
+    _gbrainSetField('allergies', _gbrainCurrentPatient.allergies);
     _gbrainHighlight('allergies');
   },
   // 9: Enter Insurance Plan
   function step9() {
-    _gbrainSetField('insurancePlan', GBRAIN_PATIENT.insurancePlan);
+    _gbrainSetField('insurancePlan', _gbrainCurrentPatient.insurancePlan);
     _gbrainHighlight('insurancePlan');
   },
   // 10: Enter Insurance Group
   function step10() {
-    _gbrainSetField('insuranceGroup', GBRAIN_PATIENT.insuranceGroup);
+    _gbrainSetField('insuranceGroup', _gbrainCurrentPatient.insuranceGroup);
     _gbrainHighlight('insuranceGroup');
   },
   // 11: Enter general patient Notes
   function step11() {
-    _gbrainSetField('notes', GBRAIN_PATIENT.notes);
+    _gbrainSetField('notes', _gbrainCurrentPatient.notes);
     _gbrainHighlight('notes');
   },
   // 12: Enter Copay amount — then submit the form to save the patient
   function step12() {
-    _gbrainSetField('copay', GBRAIN_PATIENT.copay);
+    _gbrainSetField('copay', _gbrainCurrentPatient.copay);
     _gbrainHighlight('copay');
     // Submit the patient form after a short visual pause
     setTimeout(() => {
@@ -3172,6 +3196,8 @@ window.addEventListener('message', function(event) {
       saveState();
       _gbrainPatientId = null;
     }
+    // Reset current patient back to default
+    _gbrainCurrentPatient = GBRAIN_PATIENT_DEFAULT;
     router.go('dashboard');
     toast('GBrain reset. Ready to run workflow.', 'info');
     event.source.postMessage({ type: 'gbrain-reset-done' }, '*');
@@ -3183,6 +3209,11 @@ window.addEventListener('message', function(event) {
     if (step < 0 || step >= GBRAIN_STEPS.length) {
       console.warn('gbrain-run-step: unknown step', step);
       return;
+    }
+    // Accept patient data from message (batch CSV runner passes this in)
+    // Shape: { first_name, last_name, email, phone, dob, schedule_datetime }
+    if (data.patient) {
+      _gbrainCurrentPatient = _mapPatientFromMessage(data.patient);
     }
     try {
       GBRAIN_STEPS[step]();

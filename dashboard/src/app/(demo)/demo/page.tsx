@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, Fragment } from "react";
+import { useState, Fragment } from "react";
 import { SkillCard } from "@/components/SkillCard";
 import { CommitButton } from "@/components/CommitButton";
 import { BrainChat } from "@/components/BrainChat";
@@ -21,16 +21,6 @@ const colors = {
   purple: "#b388ff",
   border: "#1f242b",
   surface: "#11151a",
-};
-
-// Stage timing in milliseconds — how long to wait before unlocking the next stage
-const STAGE_DELAYS: Record<number, number> = {
-  1: 5600,  // Screen Recording: 6 frames × 900ms ≈ 5.4s + buffer
-  2: 4200,  // AI Analysis: 5 chunks × 700ms + ~700ms = 4.2s
-  3: 0,     // Skill Captured — shown immediately after analysis
-  4: 0,     // Commit — shown immediately
-  5: 0,     // Ask — shown immediately
-  6: 0,     // Run the Skill — shown immediately
 };
 
 const PIPELINE_STAGES = [
@@ -204,35 +194,50 @@ function LockedOverlay() {
   );
 }
 
+function ContinueButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        marginTop: 14,
+        marginLeft: 38,
+        padding: "9px 22px",
+        borderRadius: 8,
+        border: "none",
+        cursor: "pointer",
+        fontSize: 13,
+        fontWeight: 700,
+        color: "#fff",
+        background: "linear-gradient(135deg, #3b6ea3 0%, #2a5078 100%)",
+        boxShadow: "0 2px 14px rgba(59,110,163,0.4)",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        letterSpacing: 0.2,
+        animation: "fadeIn 0.4s ease",
+      }}
+    >
+      Continue <span style={{ fontSize: 14 }}>→</span>
+    </button>
+  );
+}
+
 export default function DemoPage() {
   const SLUG = "register-new-patient-and-book-vaccine-appointment";
 
-  // Stage unlock state: 0 = nothing started, 1–5 = that stage is active/complete
+  // Stage unlock state: 0 = nothing started, 1–6 = that stage is active/complete
   const [pipelineStarted, setPipelineStarted] = useState(false);
   const [currentStage, setCurrentStage] = useState(0); // highest unlocked stage
-  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   function startPipeline() {
     if (pipelineStarted) return;
     setPipelineStarted(true);
     setCurrentStage(1);
-
-    // Schedule stage unlocks
-    let cumulative = 0;
-    [1, 2, 3, 4, 5, 6].forEach((stageNum) => {
-      cumulative += STAGE_DELAYS[stageNum] ?? 0;
-      if (stageNum < 6) {
-        const t = setTimeout(() => {
-          setCurrentStage(stageNum + 1);
-        }, cumulative);
-        timersRef.current.push(t);
-      }
-    });
   }
 
-  useEffect(() => {
-    return () => timersRef.current.forEach(clearTimeout);
-  }, []);
+  function advanceStage(from: number) {
+    setCurrentStage(from + 1);
+  }
 
   const isActive = (n: number) => currentStage === n;
   const isComplete = (n: number) => currentStage > n;
@@ -256,6 +261,18 @@ export default function DemoPage() {
           zIndex: -1,
         }}
       />
+      {/* Eye mark — corner decoration */}
+      <div
+        style={{
+          position: "absolute",
+          top: "1.25rem",
+          right: "1rem",
+          zIndex: 1,
+        }}
+      >
+        <EyeMark size={84} />
+      </div>
+
       {/* Hero */}
       <div style={{ marginBottom: "2.5rem" }}>
         <div
@@ -319,25 +336,13 @@ export default function DemoPage() {
         >
           <span
             style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 14,
-              flexWrap: "wrap",
+              fontSize: "clamp(56px, 9vw, 104px)",
+              fontWeight: 900,
+              letterSpacing: -2,
+              color: colors.text,
             }}
           >
-            <EyeMark size={72} />
-            <span
-              style={{
-                fontSize: "clamp(56px, 9vw, 104px)",
-                fontWeight: 900,
-                letterSpacing: -2,
-                background: "linear-gradient(95deg, #79b8ff 0%, #65d195 100%)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-              }}
-            >
-              GEyes
-            </span>
+            GEyes
           </span>
         </h1>
 
@@ -401,8 +406,17 @@ export default function DemoPage() {
               animation: "fadeIn 0.4s ease",
             }}
           >
-            <span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>⟳</span>
-            Pipeline running…
+            <span
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: "50%",
+                background: colors.green,
+                display: "inline-block",
+                animation: "pulse 1.5s ease-in-out infinite",
+              }}
+            />
+            {currentStage < 6 ? `Stage ${currentStage} / 6 — click Continue to advance` : "Pipeline complete ✓"}
           </div>
         )}
       </div>
@@ -472,6 +486,9 @@ export default function DemoPage() {
         {isUnlocked(1) ? (
           <div style={{ animation: "fadeSlideUp 0.5s ease" }}>
             <ScreenRecordingStage playing={isActive(1) || isComplete(1)} />
+            {isActive(1) && (
+              <ContinueButton onClick={() => advanceStage(1)} />
+            )}
           </div>
         ) : (
           <LockedOverlay />
@@ -503,6 +520,9 @@ export default function DemoPage() {
         {isUnlocked(2) ? (
           <div style={{ animation: "fadeSlideUp 0.5s ease" }}>
             <AIAnalysisStage playing={isActive(2) || isComplete(2)} />
+            {isActive(2) && (
+              <ContinueButton onClick={() => advanceStage(2)} />
+            )}
           </div>
         ) : (
           <LockedOverlay />
@@ -533,6 +553,9 @@ export default function DemoPage() {
         {isUnlocked(3) ? (
           <div style={{ animation: "fadeSlideUp 0.5s ease" }}>
             <SkillCard />
+            {isActive(3) && (
+              <ContinueButton onClick={() => advanceStage(3)} />
+            )}
           </div>
         ) : (
           <LockedOverlay />
@@ -563,6 +586,9 @@ export default function DemoPage() {
         {isUnlocked(4) ? (
           <div style={{ animation: "fadeSlideUp 0.5s ease" }}>
             <CommitButton slug={SLUG} skillPage={skillPage} />
+            {isActive(4) && (
+              <ContinueButton onClick={() => advanceStage(4)} />
+            )}
           </div>
         ) : (
           <LockedOverlay />
@@ -617,10 +643,11 @@ export default function DemoPage() {
             transition: "color 0.4s",
           }}
         >
-          The brain doesn&apos;t just answer — it does the work. Click{" "}
-          <strong style={{ color: colors.text }}>Next Step</strong> and watch
-          the pharmacy ERP actually execute each step of the captured workflow,
-          hands-free.
+          GEyes captured the skill once — now feed it a list of 12 patients and
+          it schedules them all{" "}
+          <strong style={{ color: colors.text }}>automatically</strong>. Click{" "}
+          <strong style={{ color: colors.text }}>▶ Run skill for all 12 patients</strong>{" "}
+          and watch the ERP fill forms for every patient hands-free.
         </p>
         {isUnlocked(6) ? (
           <div style={{ animation: "fadeSlideUp 0.5s ease" }}>
