@@ -10,15 +10,22 @@ const colors = {
   muted: "#9aa4ad",
   textDim: "#6b7580",
   blue: "#79b8ff",
+  blueDim: "#3b6ea3",
   green: "#65d195",
   amber: "#f0b050",
   red: "#ff7b7b",
   border: "#1f242b",
+  borderAccent: "#1d3a5c",
   surface: "#11151a",
+  surfaceAlt: "#0f1318",
   bg: "#0c0f14",
+  inputBg: "#080a0d",
 };
 
 const ERP_ORIGIN = "http://localhost:5002";
+
+const SUGGESTED_PROMPT =
+  "Schedule everyone in patients-to-schedule.csv for their vaccine appointments.";
 
 // ---- CSV types ----
 interface Patient {
@@ -37,6 +44,16 @@ interface PatientRow extends Patient {
   stepsDone: number; // 0-19
 }
 
+// ---- Chat message types ----
+type ChatRole = "user" | "assistant";
+
+interface ChatMessage {
+  id: string;
+  role: ChatRole;
+  text: string;
+  streaming?: boolean;
+}
+
 // ---- Simple CSV parser ----
 function parseCsv(text: string): Patient[] {
   const lines = text.trim().split("\n");
@@ -44,7 +61,9 @@ function parseCsv(text: string): Patient[] {
   return lines.slice(1).map((line) => {
     const vals = line.split(",").map((v) => v.trim());
     const obj: Record<string, string> = {};
-    headers.forEach((h, i) => { obj[h] = vals[i] ?? ""; });
+    headers.forEach((h, i) => {
+      obj[h] = vals[i] ?? "";
+    });
     return obj as unknown as Patient;
   });
 }
@@ -54,52 +73,50 @@ const STEP_DELAY_MS = 700;
 // Delay between patients (ms)
 const PATIENT_DELAY_MS = 1200;
 
+let msgCounter = 0;
+function newId() {
+  return `msg-${++msgCounter}`;
+}
+
 export function SkillRunner() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeReady, setIframeReady] = useState(false);
 
-  // Patient list state
+  // Patient list state (kept in background, not shown in left panel)
   const [patients, setPatients] = useState<PatientRow[]>([]);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [csvName, setCsvName] = useState("patients-to-schedule.csv");
-  const [task, setTask] = useState(
-    "Register and schedule these patients for vaccine appointments",
-  );
+  const patientsRef = useRef<PatientRow[]>([]);
+  // Keep ref in sync so runAll callbacks can read latest
+  useEffect(() => {
+    patientsRef.current = patients;
+  }, [patients]);
 
   // Batch runner state
   const [running, setRunning] = useState(false);
   const [done, setDone] = useState(false);
   const [currentPatientIdx, setCurrentPatientIdx] = useState(-1);
-  const [currentStepLabel, setCurrentStepLabel] = useState("");
 
   // Refs for communicating with the iframe mid-run
   const stepAckRef = useRef<((step: number) => void) | null>(null);
   const resetAckRef = useRef<(() => void) | null>(null);
   const abortRef = useRef(false);
 
-  // Load CSV on mount
+  // ---- Chat state ----
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [chatBusy, setChatBusy] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-scroll to bottom when messages change
   useEffect(() => {
-    fetch("/patients-to-schedule.csv")
-      .then((r) => r.text())
-      .then((text) => {
-        const parsed = parseCsv(text);
-        setPatients(
-          parsed.map((p) => ({ ...p, status: "pending", stepsDone: 0 }))
-        );
-        setLoading(false);
-      })
-      .catch((err) => {
-        setLoadError(String(err));
-        setLoading(false);
-      });
-  }, []);
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   // Listen for postMessage replies from the ERP iframe
   useEffect(() => {
     function onMessage(ev: MessageEvent) {
       if (!ev.data || typeof ev.data !== "object") return;
-
       if (ev.data.type === "gbrain-step-done") {
         stepAckRef.current?.(ev.data.step);
       }
@@ -143,17 +160,44 @@ export function SkillRunner() {
     return new Promise<void>((r) => setTimeout(r, ms));
   }
 
-  async function runAll() {
-    if (running || done) return;
+  // ---- Chat helpers ----
+  function appendMsg(msg: ChatMessage) {
+    setMessages((prev) => [...prev, msg]);
+    return msg.id;
+  }
+
+  function updateMsg(id: string, patch: Partial<ChatMessage>) {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, ...patch } : m))
+    );
+  }
+
+  // ---- Main run orchestration (chat-driven) ----
+  async function runAllWithChat(patientList: PatientRow[]) {
+    if (running) return;
     abortRef.current = false;
     setRunning(true);
 
-    for (let pi = 0; pi < patients.length; pi++) {
+    const total = patientList.length;
+
+    // Assistant: narrating start
+    const startId = newId();
+    appendMsg({
+      id: startId,
+      role: "assistant",
+      text: `Found ${total} patients. Running the captured skill — Register New Patient and Book Vaccine Appointment — for each.`,
+    });
+
+    // Set patients into state
+    setPatients(patientList);
+
+    for (let pi = 0; pi < patientList.length; pi++) {
       if (abortRef.current) break;
 
-      const patient = patients[pi];
+      const patient = patientList[pi];
+      const fullName = `${patient.first_name} ${patient.last_name}`;
 
-      // Reset ERP between patients (also resets on first patient)
+      // Reset ERP between patients
       await resetErp();
       await sleep(400);
 
@@ -164,18 +208,35 @@ export function SkillRunner() {
         )
       );
 
-      // Run all 19 steps
+      // Post a "registering" message for this patient
+      const patientMsgId = newId();
+      appendMsg({
+        id: patientMsgId,
+        role: "assistant",
+        text: `▸ Registering ${fullName}…`,
+        streaming: true,
+      });
+
+      // Run all steps
+      let stepLabel = "";
+      let patientError = false;
       for (let step = 0; step < STEPS.length; step++) {
         if (abortRef.current) break;
-        setCurrentStepLabel(STEPS[step]);
+        stepLabel = STEPS[step];
         setPatients((prev) =>
           prev.map((row, i) =>
             i === pi ? { ...row, stepsDone: step } : row
           )
         );
+        // Update the patient bubble with current step
+        updateMsg(patientMsgId, {
+          text: `▸ Registering ${fullName}…  (${stepLabel})`,
+          streaming: true,
+        });
         try {
           await runStep(step, patient);
         } catch {
+          patientError = true;
           setPatients((prev) =>
             prev.map((row, i) =>
               i === pi ? { ...row, status: "error" } : row
@@ -186,16 +247,26 @@ export function SkillRunner() {
         await sleep(STEP_DELAY_MS);
       }
 
-      if (!abortRef.current) {
+      if (!abortRef.current && !patientError) {
         setPatients((prev) =>
           prev.map((row, i) =>
-            i === pi ? { ...row, status: "done", stepsDone: STEPS.length } : row
+            i === pi
+              ? { ...row, status: "done", stepsDone: STEPS.length }
+              : row
           )
         );
+        updateMsg(patientMsgId, {
+          text: `✓ ${fullName} — registered & vaccine booked for ${patient.schedule_datetime}`,
+          streaming: false,
+        });
+      } else if (patientError) {
+        updateMsg(patientMsgId, {
+          text: `✗ ${fullName} — error during: ${stepLabel}`,
+          streaming: false,
+        });
       }
 
-      // Pause between patients
-      if (pi < patients.length - 1) {
+      if (pi < patientList.length - 1) {
         await sleep(PATIENT_DELAY_MS);
       }
     }
@@ -204,18 +275,84 @@ export function SkillRunner() {
     if (!abortRef.current) {
       setDone(true);
       setCurrentPatientIdx(-1);
-      setCurrentStepLabel("");
+      appendMsg({
+        id: newId(),
+        role: "assistant",
+        text: `✓ Done — all ${total} patients registered and scheduled, hands-free.`,
+      });
     }
   }
 
-  function handleReset() {
-    abortRef.current = true;
-    setRunning(false);
-    setDone(false);
-    setCurrentPatientIdx(-1);
-    setCurrentStepLabel("");
-    setPatients((prev) => prev.map((p) => ({ ...p, status: "pending", stepsDone: 0 })));
-    postToErp({ type: "gbrain-reset" });
+  // ---- Handle chat send ----
+  async function handleSend(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed || chatBusy) return;
+    setChatBusy(true);
+    setInput("");
+
+    // User bubble
+    appendMsg({ id: newId(), role: "user", text: trimmed });
+
+    // Detect the scheduling intent
+    const isScheduleIntent =
+      trimmed.toLowerCase().includes("schedule") ||
+      trimmed.toLowerCase().includes("patient") ||
+      trimmed.toLowerCase().includes("vaccine") ||
+      trimmed.toLowerCase().includes("appointment") ||
+      trimmed.toLowerCase().includes("csv");
+
+    if (!isScheduleIntent) {
+      appendMsg({
+        id: newId(),
+        role: "assistant",
+        text: "I can schedule patients from a CSV file. Try: \"Schedule everyone in patients-to-schedule.csv for their vaccine appointments.\"",
+      });
+      setChatBusy(false);
+      return;
+    }
+
+    // Step 1: narrate loading
+    const loadMsgId = newId();
+    appendMsg({
+      id: loadMsgId,
+      role: "assistant",
+      text: "Loading patients-to-schedule.csv…",
+      streaming: true,
+    });
+
+    let patientList: PatientRow[];
+    try {
+      const res = await fetch("/patients-to-schedule.csv");
+      const text2 = await res.text();
+      const parsed = parseCsv(text2);
+      patientList = parsed.map((p) => ({
+        ...p,
+        status: "pending" as PatientStatus,
+        stepsDone: 0,
+      }));
+    } catch (err) {
+      updateMsg(loadMsgId, {
+        text: `Failed to load CSV: ${String(err)}`,
+        streaming: false,
+      });
+      setChatBusy(false);
+      return;
+    }
+
+    updateMsg(loadMsgId, {
+      text: `Loaded patients-to-schedule.csv — ${patientList.length} patients found.`,
+      streaming: false,
+    });
+
+    setChatBusy(false);
+    await runAllWithChat(patientList);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend(input);
+    }
   }
 
   function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -224,30 +361,43 @@ export function SkillRunner() {
     file.text().then((text) => {
       try {
         const parsed = parseCsv(text);
-        setPatients(parsed.map((p) => ({ ...p, status: "pending", stepsDone: 0 })));
-        setCsvName(file.name);
-        setLoadError(null);
-        setLoading(false);
+        const patientList = parsed.map((p) => ({
+          ...p,
+          status: "pending" as PatientStatus,
+          stepsDone: 0,
+        }));
+        setPatients(patientList);
         setDone(false);
+        appendMsg({
+          id: newId(),
+          role: "assistant",
+          text: `Loaded ${file.name} — ${patientList.length} patients. Send a message to run the skill.`,
+        });
       } catch (err) {
-        setLoadError(String(err));
+        appendMsg({
+          id: newId(),
+          role: "assistant",
+          text: `Failed to parse ${file.name}: ${String(err)}`,
+        });
       }
     });
     e.target.value = "";
   }
 
-  const statusIcon = (s: PatientStatus, stepsDone: number, idx: number) => {
-    if (s === "done") return <span style={{ color: colors.green, fontWeight: 700 }}>✓</span>;
-    if (s === "error") return <span style={{ color: colors.red }}>✗</span>;
-    if (s === "processing") {
-      return (
-        <span style={{ color: colors.blue, fontSize: 11 }}>
-          {stepsDone}/{STEPS.length}
-        </span>
-      );
-    }
-    return <span style={{ color: colors.textDim, fontSize: 11 }}>{idx + 1}</span>;
-  };
+  function handleReset() {
+    abortRef.current = true;
+    setRunning(false);
+    setDone(false);
+    setCurrentPatientIdx(-1);
+    setPatients((prev) =>
+      prev.map((p) => ({ ...p, status: "pending", stepsDone: 0 }))
+    );
+    postToErp({ type: "gbrain-reset" });
+    setMessages([]);
+    setChatBusy(false);
+  }
+
+  const showSuggested = messages.length === 0;
 
   return (
     <div
@@ -256,378 +406,358 @@ export function SkillRunner() {
         gridTemplateColumns: "300px 1fr",
         gap: 16,
         alignItems: "start",
-        // Break out of the 860px column so the ERP renders as a wide
-        // landscape rectangle, not a square.
         width: "min(1280px, 94vw)",
         position: "relative",
         left: "50%",
         transform: "translateX(-50%)",
       }}
     >
-      {/* Left panel: patient list + controls */}
+      {/* Left panel: Chat */}
       <div
         style={{
-          background: colors.bg,
-          border: `1px solid ${colors.border}`,
+          background: colors.surface,
+          border: `1px solid ${colors.borderAccent}`,
           borderRadius: 10,
-          padding: "16px 14px",
           display: "flex",
           flexDirection: "column",
-          gap: 12,
+          overflow: "hidden",
+          height: 558,
+          boxShadow: "0 4px 24px rgba(0,0,0,0.4)",
         }}
       >
-        {/* Header */}
+        {/* Chat header */}
         <div
           style={{
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: 0.8,
-            textTransform: "uppercase",
-            color: colors.muted,
+            padding: "12px 14px",
             borderBottom: `1px solid ${colors.border}`,
-            paddingBottom: 8,
+            background: "rgba(101,209,149,0.04)",
             display: "flex",
-            justifyContent: "space-between",
             alignItems: "center",
+            justifyContent: "space-between",
+            flexShrink: 0,
           }}
         >
-          <span>Patients to Schedule</span>
-          {!loading && !loadError && (
-            <span
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div
               style={{
-                fontSize: 10,
-                padding: "1px 7px",
-                borderRadius: 999,
-                background: "rgba(121,184,255,0.1)",
-                border: "1px solid rgba(121,184,255,0.25)",
-                color: colors.blue,
+                width: 28,
+                height: 28,
+                borderRadius: "50%",
+                background: "linear-gradient(135deg, #1b3a2b 0%, #0f2a1e 100%)",
+                border: `1px solid ${colors.green}`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 13,
+                fontWeight: 700,
+                color: colors.green,
+                flexShrink: 0,
               }}
             >
-              {patients.length} patients
-            </span>
-          )}
-        </div>
-
-        {/* Task input + CSV upload */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <input
-            type="text"
-            value={task}
-            onChange={(e) => setTask(e.target.value)}
-            placeholder="Type your task…"
-            disabled={running}
-            style={{
-              width: "100%",
-              boxSizing: "border-box",
-              padding: "8px 10px",
-              borderRadius: 6,
-              border: `1px solid ${colors.border}`,
-              background: "#080a0d",
-              color: colors.text,
-              fontSize: 12,
-              outline: "none",
-            }}
-          />
-          <label
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 7,
-              padding: "8px 10px",
-              borderRadius: 6,
-              border: `1px dashed ${colors.border}`,
-              background: "rgba(121,184,255,0.04)",
-              color: colors.blue,
-              fontSize: 11,
-              fontWeight: 600,
-              cursor: running ? "not-allowed" : "pointer",
-            }}
-          >
-            <span style={{ fontSize: 13 }}>⬆</span>
-            Upload patient CSV
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              onChange={handleUpload}
-              disabled={running}
-              style={{ display: "none" }}
-            />
-          </label>
-          <div
-            style={{
-              fontSize: 10,
-              color: colors.textDim,
-              textAlign: "center",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            📄 {csvName}
-          </div>
-        </div>
-
-        {/* Patient list */}
-        {loading && (
-          <div style={{ fontSize: 12, color: colors.textDim, textAlign: "center", padding: "12px 0" }}>
-            Loading patients…
-          </div>
-        )}
-        {loadError && (
-          <div style={{ fontSize: 12, color: colors.red }}>
-            Failed to load CSV: {loadError}
-          </div>
-        )}
-        {!loading && !loadError && (
-          <ol
-            style={{
-              margin: 0,
-              padding: 0,
-              listStyle: "none",
-              display: "flex",
-              flexDirection: "column",
-              gap: 5,
-              maxHeight: 340,
-              overflowY: "auto",
-            }}
-          >
-            {patients.map((p, i) => {
-              const isActive = i === currentPatientIdx && running;
-              return (
-                <li
-                  key={i}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "6px 8px",
-                    borderRadius: 6,
-                    background: isActive
-                      ? "rgba(121,184,255,0.08)"
-                      : p.status === "done"
-                      ? "rgba(101,209,149,0.06)"
-                      : "transparent",
-                    border: `1px solid ${
-                      isActive
-                        ? "rgba(121,184,255,0.25)"
-                        : p.status === "done"
-                        ? "rgba(101,209,149,0.2)"
-                        : "transparent"
-                    }`,
-                    transition: "all 0.3s",
-                  }}
-                >
-                  {/* Status badge */}
-                  <span
-                    style={{
-                      flexShrink: 0,
-                      width: 26,
-                      height: 22,
-                      borderRadius: 4,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: 11,
-                      fontWeight: 700,
-                      background:
-                        p.status === "done"
-                          ? "rgba(101,209,149,0.15)"
-                          : isActive
-                          ? "rgba(121,184,255,0.15)"
-                          : "rgba(255,255,255,0.04)",
-                      border: `1px solid ${
-                        p.status === "done"
-                          ? colors.green
-                          : isActive
-                          ? colors.blue
-                          : colors.border
-                      }`,
-                    }}
-                  >
-                    {statusIcon(p.status, p.stepsDone, i)}
-                  </span>
-
-                  {/* Name + date */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontSize: 12,
-                        fontWeight: isActive ? 700 : 500,
-                        color:
-                          p.status === "done"
-                            ? colors.green
-                            : isActive
-                            ? colors.text
-                            : colors.muted,
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        transition: "color 0.3s",
-                      }}
-                    >
-                      {p.first_name} {p.last_name}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 10,
-                        color: colors.textDim,
-                        marginTop: 1,
-                      }}
-                    >
-                      {p.schedule_datetime}
-                    </div>
-                  </div>
-
-                  {/* Processing indicator */}
-                  {isActive && (
-                    <span
-                      style={{
-                        display: "inline-block",
-                        fontSize: 13,
-                        color: colors.blue,
-                        animation: "spin 0.9s linear infinite",
-                        flexShrink: 0,
-                      }}
-                    >
-                      ⟳
-                    </span>
-                  )}
-                </li>
-              );
-            })}
-          </ol>
-        )}
-
-        {/* Active step label */}
-        {running && currentStepLabel && (
-          <div
-            style={{
-              fontSize: 11,
-              color: colors.blue,
-              background: "rgba(121,184,255,0.07)",
-              border: "1px solid rgba(121,184,255,0.2)",
-              borderRadius: 6,
-              padding: "5px 8px",
-              lineHeight: 1.4,
-            }}
-          >
-            <span style={{ fontWeight: 700 }}>Running:</span> {currentStepLabel}
-          </div>
-        )}
-
-        {/* Divider */}
-        <div style={{ borderTop: `1px solid ${colors.border}` }} />
-
-        {/* Controls */}
-        {done ? (
-          <div
-            style={{
-              padding: "14px 10px",
-              borderRadius: 8,
-              background: "rgba(101,209,149,0.08)",
-              border: "1px solid rgba(101,209,149,0.25)",
-              textAlign: "center",
-            }}
-          >
-            <div style={{ fontSize: 22, marginBottom: 6 }}>✓</div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: colors.green, lineHeight: 1.4 }}>
-              All {patients.length} patients registered &amp; vaccine appointments booked
+              G
             </div>
-            <div style={{ fontSize: 11, color: colors.muted, marginTop: 4, lineHeight: 1.4 }}>
-              Hands-free. No clicks required.
+            <div>
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: colors.text,
+                  lineHeight: 1.2,
+                }}
+              >
+                Skill Agent
+              </div>
+              <div style={{ fontSize: 10, color: colors.green }}>
+                {running ? "Running…" : done ? "Complete" : "Ready"}
+              </div>
             </div>
+          </div>
+          {(running || done) && (
             <button
               onClick={handleReset}
               style={{
-                marginTop: 10,
-                padding: "6px 14px",
-                borderRadius: 6,
+                padding: "4px 10px",
+                borderRadius: 5,
                 border: `1px solid ${colors.border}`,
-                background: colors.surface,
+                background: "transparent",
                 color: colors.muted,
-                fontSize: 12,
+                fontSize: 11,
                 cursor: "pointer",
               }}
             >
               ⟲ Reset
             </button>
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <button
-              onClick={runAll}
-              disabled={running || loading || !!loadError}
+          )}
+        </div>
+
+        {/* Messages area */}
+        <div
+          style={{
+            flex: 1,
+            overflowY: "auto",
+            padding: "14px 12px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+          }}
+        >
+          {/* Suggested prompt chip (shown only when no messages) */}
+          {showSuggested && (
+            <div
               style={{
-                padding: "11px 0",
-                borderRadius: 8,
-                border: "none",
-                cursor: running || loading || !!loadError ? "not-allowed" : "pointer",
-                fontSize: 13,
-                fontWeight: 700,
-                color: "#fff",
-                background:
-                  running || loading || !!loadError
-                    ? "#2a3040"
-                    : "linear-gradient(135deg, #3b6ea3 0%, #2a5078 100%)",
-                boxShadow:
-                  running || loading || !!loadError
-                    ? "none"
-                    : "0 2px 16px rgba(59,110,163,0.4)",
                 display: "flex",
+                flexDirection: "column",
                 alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                transition: "all 0.2s",
+                gap: 12,
+                padding: "20px 0 8px",
               }}
             >
-              {running ? (
-                <>
-                  <span style={{ display: "inline-block", animation: "spin 0.9s linear infinite" }}>
-                    ⟳
-                  </span>
-                  Processing patients…
-                </>
-              ) : (
-                <>▶ Run skill for all {patients.length} patients</>
-              )}
-            </button>
-
-            {running && (
-              <button
-                onClick={handleReset}
-                style={{
-                  padding: "6px 0",
-                  borderRadius: 6,
-                  border: `1px solid ${colors.border}`,
-                  background: "transparent",
-                  color: colors.muted,
-                  fontSize: 12,
-                  cursor: "pointer",
-                }}
-              >
-                ■ Stop
-              </button>
-            )}
-
-            {!running && (
               <p
                 style={{
                   margin: 0,
-                  fontSize: 11,
-                  color: colors.textDim,
+                  fontSize: 12,
+                  color: colors.muted,
                   textAlign: "center",
                   lineHeight: 1.5,
                 }}
               >
-                Automatically processes all {patients.length} patients through the ERP — no clicks needed.
+                Run the captured skill for a batch of patients:
               </p>
-            )}
-          </div>
-        )}
+              <button
+                onClick={() => handleSend(SUGGESTED_PROMPT)}
+                disabled={chatBusy}
+                style={{
+                  background: "transparent",
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 8,
+                  padding: "9px 13px",
+                  color: colors.blue,
+                  fontSize: 12,
+                  textAlign: "left",
+                  cursor: chatBusy ? "not-allowed" : "pointer",
+                  lineHeight: 1.45,
+                  width: "100%",
+                  transition: "border-color 0.15s, background 0.15s",
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.borderColor =
+                    colors.blueDim;
+                  (e.currentTarget as HTMLButtonElement).style.background =
+                    "#13233a";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.borderColor =
+                    colors.border;
+                  (e.currentTarget as HTMLButtonElement).style.background =
+                    "transparent";
+                }}
+              >
+                {SUGGESTED_PROMPT}
+              </button>
+            </div>
+          )}
+
+          {/* Message bubbles */}
+          {messages.map((m) => (
+            <div
+              key={m.id}
+              style={{
+                display: "flex",
+                flexDirection: m.role === "user" ? "row-reverse" : "row",
+                gap: 7,
+                alignItems: "flex-start",
+              }}
+            >
+              {/* Avatar */}
+              <div
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: "50%",
+                  flexShrink: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  background:
+                    m.role === "user"
+                      ? "linear-gradient(135deg, #13233a 0%, #0d1a2e 100%)"
+                      : "linear-gradient(135deg, #1b3a2b 0%, #0f2a1e 100%)",
+                  border: `1px solid ${
+                    m.role === "user" ? colors.blueDim : colors.green
+                  }`,
+                  color:
+                    m.role === "user" ? colors.blue : colors.green,
+                  marginTop: 2,
+                }}
+              >
+                {m.role === "user" ? "U" : "G"}
+              </div>
+
+              {/* Bubble */}
+              <div
+                style={{
+                  maxWidth: "84%",
+                  padding: "8px 11px",
+                  borderRadius:
+                    m.role === "user"
+                      ? "11px 4px 11px 11px"
+                      : "4px 11px 11px 11px",
+                  background:
+                    m.role === "user" ? "#13233a" : colors.surfaceAlt,
+                  border: `1px solid ${
+                    m.role === "user" ? colors.borderAccent : colors.border
+                  }`,
+                  fontSize: 12,
+                  lineHeight: 1.55,
+                  color:
+                    m.text.startsWith("✓")
+                      ? colors.green
+                      : m.text.startsWith("✗")
+                      ? colors.red
+                      : m.text.startsWith("▸")
+                      ? colors.blue
+                      : colors.text,
+                }}
+              >
+                {m.text || (
+                  m.streaming ? (
+                    <span style={{ color: colors.textDim, fontStyle: "italic" }}>
+                      …
+                    </span>
+                  ) : null
+                )}
+                {m.streaming && (
+                  <span
+                    style={{
+                      display: "inline-block",
+                      width: 7,
+                      height: 12,
+                      background: colors.green,
+                      marginLeft: 3,
+                      verticalAlign: "middle",
+                      borderRadius: 1,
+                      animation: "blink 0.8s step-start infinite",
+                    }}
+                  />
+                )}
+              </div>
+            </div>
+          ))}
+
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Composer */}
+        <div
+          style={{
+            borderTop: `1px solid ${colors.border}`,
+            padding: "10px 10px",
+            display: "flex",
+            gap: 6,
+            alignItems: "center",
+            background: colors.inputBg,
+            flexShrink: 0,
+          }}
+        >
+          {/* Attach (CSV upload) button */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={running}
+            title="Upload patient CSV"
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 6,
+              border: `1px solid ${colors.border}`,
+              background: "transparent",
+              color: running ? colors.textDim : colors.muted,
+              fontSize: 16,
+              cursor: running ? "not-allowed" : "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+              lineHeight: 1,
+            }}
+          >
+            📎
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            onChange={handleUpload}
+            disabled={running}
+            style={{ display: "none" }}
+          />
+
+          {/* Text input */}
+          <input
+            ref={inputRef}
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Message…"
+            disabled={chatBusy || running}
+            style={{
+              flex: 1,
+              background: "transparent",
+              border: `1px solid ${colors.border}`,
+              borderRadius: 7,
+              padding: "7px 10px",
+              color: colors.text,
+              fontSize: 12,
+              outline: "none",
+              fontFamily: "inherit",
+              lineHeight: 1.4,
+              height: 32,
+              boxSizing: "border-box",
+              transition: "border-color 0.15s",
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = colors.blueDim;
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = colors.border;
+            }}
+          />
+
+          {/* Send button */}
+          <button
+            onClick={() => handleSend(input)}
+            disabled={chatBusy || running || !input.trim()}
+            style={{
+              background:
+                chatBusy || running || !input.trim()
+                  ? "#1a2030"
+                  : "linear-gradient(135deg, #3b6ea3 0%, #2a5078 100%)",
+              border: "none",
+              borderRadius: 7,
+              padding: "0 12px",
+              height: 32,
+              color:
+                chatBusy || running || !input.trim()
+                  ? colors.textDim
+                  : colors.text,
+              fontSize: 12,
+              fontWeight: 600,
+              cursor:
+                chatBusy || running || !input.trim()
+                  ? "not-allowed"
+                  : "pointer",
+              flexShrink: 0,
+              transition: "background 0.2s, color 0.2s",
+            }}
+          >
+            {chatBusy ? "…" : "Send"}
+          </button>
+        </div>
       </div>
 
-      {/* Right panel: ERP iframe */}
+      {/* Right panel: ERP iframe — unchanged */}
       <div
         style={{
           border: `1px solid ${colors.border}`,
@@ -678,7 +808,9 @@ export function SkillRunner() {
               animation: "fadeIn 0.3s ease",
             }}
           >
-            Patient {currentPatientIdx + 1}/{patients.length} — {patients[currentPatientIdx]?.first_name} {patients[currentPatientIdx]?.last_name}
+            Patient {currentPatientIdx + 1}/{patients.length} —{" "}
+            {patients[currentPatientIdx]?.first_name}{" "}
+            {patients[currentPatientIdx]?.last_name}
           </div>
         )}
         <iframe
@@ -707,7 +839,12 @@ export function SkillRunner() {
               gap: 8,
             }}
           >
-            <span style={{ display: "inline-block", animation: "spin 1s linear infinite" }}>
+            <span
+              style={{
+                display: "inline-block",
+                animation: "spin 1s linear infinite",
+              }}
+            >
               ⟳
             </span>
             Loading ERP…
@@ -718,6 +855,10 @@ export function SkillRunner() {
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes blink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
+        }
       `}</style>
     </div>
   );
