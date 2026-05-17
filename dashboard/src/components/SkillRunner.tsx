@@ -62,6 +62,10 @@ export function SkillRunner() {
   const [patients, setPatients] = useState<PatientRow[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [csvName, setCsvName] = useState("patients-to-schedule.csv");
+  const [task, setTask] = useState(
+    "Register and schedule these patients for vaccine appointments",
+  );
 
   // Batch runner state
   const [running, setRunning] = useState(false);
@@ -214,6 +218,24 @@ export function SkillRunner() {
     postToErp({ type: "gbrain-reset" });
   }
 
+  function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    file.text().then((text) => {
+      try {
+        const parsed = parseCsv(text);
+        setPatients(parsed.map((p) => ({ ...p, status: "pending", stepsDone: 0 })));
+        setCsvName(file.name);
+        setLoadError(null);
+        setLoading(false);
+        setDone(false);
+      } catch (err) {
+        setLoadError(String(err));
+      }
+    });
+    e.target.value = "";
+  }
+
   const statusIcon = (s: PatientStatus, stepsDone: number, idx: number) => {
     if (s === "done") return <span style={{ color: colors.green, fontWeight: 700 }}>✓</span>;
     if (s === "error") return <span style={{ color: colors.red }}>✗</span>;
@@ -231,9 +253,15 @@ export function SkillRunner() {
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "320px 1fr",
+        gridTemplateColumns: "300px 1fr",
         gap: 16,
         alignItems: "start",
+        // Break out of the 860px column so the ERP renders as a wide
+        // landscape rectangle, not a square.
+        width: "min(1280px, 94vw)",
+        position: "relative",
+        left: "50%",
+        transform: "translateX(-50%)",
       }}
     >
       {/* Left panel: patient list + controls */}
@@ -278,6 +306,66 @@ export function SkillRunner() {
               {patients.length} patients
             </span>
           )}
+        </div>
+
+        {/* Task input + CSV upload */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <input
+            type="text"
+            value={task}
+            onChange={(e) => setTask(e.target.value)}
+            placeholder="Type your task…"
+            disabled={running}
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              padding: "8px 10px",
+              borderRadius: 6,
+              border: `1px solid ${colors.border}`,
+              background: "#080a0d",
+              color: colors.text,
+              fontSize: 12,
+              outline: "none",
+            }}
+          />
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 7,
+              padding: "8px 10px",
+              borderRadius: 6,
+              border: `1px dashed ${colors.border}`,
+              background: "rgba(121,184,255,0.04)",
+              color: colors.blue,
+              fontSize: 11,
+              fontWeight: 600,
+              cursor: running ? "not-allowed" : "pointer",
+            }}
+          >
+            <span style={{ fontSize: 13 }}>⬆</span>
+            Upload patient CSV
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              onChange={handleUpload}
+              disabled={running}
+              style={{ display: "none" }}
+            />
+          </label>
+          <div
+            style={{
+              fontSize: 10,
+              color: colors.textDim,
+              textAlign: "center",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            📄 {csvName}
+          </div>
         </div>
 
         {/* Patient list */}
