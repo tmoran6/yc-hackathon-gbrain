@@ -301,26 +301,43 @@ export default function DemoPage() {
           GBrain gave businesses a brain.
         </div>
 
+        <div
+          style={{
+            fontSize: "clamp(20px, 2.6vw, 28px)",
+            fontWeight: 700,
+            color: colors.muted,
+            marginBottom: "0.2rem",
+          }}
+        >
+          We built the Eyes.
+        </div>
         <h1
           style={{
-            fontSize: "clamp(28px, 4vw, 42px)",
-            fontWeight: 800,
             margin: "0 0 0.75rem",
-            color: colors.text,
-            lineHeight: 1.15,
-            letterSpacing: -0.5,
+            lineHeight: 1.05,
           }}
         >
           <span
             style={{
               display: "inline-flex",
               alignItems: "center",
-              gap: 16,
+              gap: 14,
               flexWrap: "wrap",
             }}
           >
-            We built the
-            <EyeMark size={58} />
+            <EyeMark size={72} />
+            <span
+              style={{
+                fontSize: "clamp(56px, 9vw, 104px)",
+                fontWeight: 900,
+                letterSpacing: -2,
+                background: "linear-gradient(95deg, #79b8ff 0%, #65d195 100%)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+              }}
+            >
+              GEyes
+            </span>
           </span>
         </h1>
 
